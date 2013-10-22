@@ -1,0 +1,11 @@
+Case File: E-tax.exe
+Status: To Resolve
+Problem Tab: TLS Headers
+Problem: Crashed
+Comment: 
+
+Case File: C:\Program Files (x86)\Microchip\MPLABX\Uninstall_MPLAB_X_IDE_v1.85.exe
+Status: To Resolve
+Problem Tab: Export Headers
+Problem: Crashed
+Comment: 

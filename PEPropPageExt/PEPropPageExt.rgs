@@ -1,0 +1,49 @@
+HKCR
+{
+	PEPropPageExt.1 = s 'PEPropPageExt Class'
+	{
+		CLSID = s '{9939CDB0-9819-4a29-85D3-6E1897260ED4}'
+	}
+
+	PEPropPageExt = s 'PEPropPageExt Class'
+	{		
+		CurVer = s 'PEPropPageExt.1'
+	}
+
+	NoRemove CLSID
+	{
+		ForceRemove {9939CDB0-9819-4a29-85D3-6E1897260ED4} = s 'PEPropPageExt Class'
+		{
+			ProgID = s 'PEPropPageExt.1'
+			VersionIndependentProgID = s 'PEPropPageExt'
+			InprocServer32 = s '%MODULE%'
+			{
+				val ThreadingModel = s 'Apartment'
+			}
+			TypeLib = s '{367ADAA6-099D-4246-9289-0157F2B1689C}'
+			Version = s '1.0'
+		}
+	}
+
+	NoRemove exefile
+    {
+        NoRemove shellex
+        {
+            NoRemove PropertySheetHandlers
+            {
+                {9939CDB0-9819-4a29-85D3-6E1897260ED4}
+            }
+        }
+    }
+
+	NoRemove dllfile
+    {
+        NoRemove shellex
+        {
+            NoRemove PropertySheetHandlers
+            {
+                {9939CDB0-9819-4a29-85D3-6E1897260ED4}
+            }
+        }
+    }
+}

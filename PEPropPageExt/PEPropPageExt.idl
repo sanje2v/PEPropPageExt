@@ -1,0 +1,36 @@
+// PEPropPageExt.idl : IDL source for PEPropPageExt
+//
+
+// This file will be processed by the MIDL tool to
+// produce the type library (PEPropPageExt.tlb) and marshalling code.
+
+import "oaidl.idl";
+import "ocidl.idl";
+
+[
+	object,
+	uuid(1BF849B2-6F21-44DD-8376-8EB867E4F83A),
+	pointer_default(unique)
+]
+interface IPEPropPageExt : IUnknown{
+	import "unknwn.idl";
+         import "wtypes.idl";
+         HRESULT Fx(int iValue);
+};
+
+[
+	uuid(367ADAA6-099D-4246-9289-0157F2B1689C),
+	version(1.0),
+]
+library PEPropPageExtLib
+{
+	importlib("stdole2.tlb");
+	[
+		uuid(9939CDB0-9819-4a29-85D3-6E1897260ED4)		
+	]
+	coclass PEPropPageExt
+	{
+		[default] interface IPEPropPageExt;
+	};
+};
+

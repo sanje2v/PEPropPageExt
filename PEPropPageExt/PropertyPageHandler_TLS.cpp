@@ -1,18 +1,22 @@
 #include "PropertyPageHandler.h"
 
 
-void PropertyPageHandler_TLS::OnInitDialog()
+PropertyPageHandler_TLS::PropertyPageHandler_TLS(HWND hWnd, PEReadWrite& PEReaderWriter)
+	: PropertyPageHandler(hWnd, PEReaderWriter)
 {
-	HWND hListViewTLSData = GetDlgItem(m_hWnd, IDC_LISTTLSDATA);
-	HWND hListViewCallbacks = GetDlgItem(m_hWnd, IDC_LISTTLSCALLBACKS);
+	m_hListViewTLSData = GetDlgItem(m_hWnd, IDC_LISTTLSDATA);
+	m_hListViewCallbacks = GetDlgItem(m_hWnd, IDC_LISTTLSCALLBACKS);
 
 	// Setup controls with layout manager
 	m_pLayoutManager->AddChildConstraint(IDC_LISTLOADCONFIG, CWA_LEFTRIGHT, CWA_TOP);
 	m_pLayoutManager->AddChildConstraint(IDC_LISTTLSCALLBACKS, CWA_LEFTRIGHT, CWA_TOPBOTTOM);
 
 	// Set full row selection style for listviews
-	ListView_SetExtendedListViewStyleEx(hListViewTLSData, LVS_EX_FULLROWSELECT, LVS_EX_FULLROWSELECT);
+	ListView_SetExtendedListViewStyleEx(m_hListViewTLSData, LVS_EX_FULLROWSELECT, LVS_EX_FULLROWSELECT);
+}
 
+void PropertyPageHandler_TLS::OnInitDialog()
+{
 	// Fill them with data
 	vector<TextAndData> TLSItemsInfo;
 
@@ -55,7 +59,7 @@ void PropertyPageHandler_TLS::OnInitDialog()
 	{
 		column.mask = LVCF_TEXT;
 		column.pszText = GenericColumnText[i];
-		ListView_InsertColumn(hListViewTLSData, i, &column);
+		ListView_InsertColumn(m_hListViewTLSData, i, &column);
 	}
 
 	// Insert ListView columns for 'hListViewCallbacks'
@@ -65,7 +69,7 @@ void PropertyPageHandler_TLS::OnInitDialog()
 	{
 		column.mask = LVCF_TEXT;
 		column.pszText = CallbacksColumnText[i];
-		ListView_InsertColumn(hListViewCallbacks, i, &column);
+		ListView_InsertColumn(m_hListViewCallbacks, i, &column);
 	}
 
 	// Insert ListView items for 'hListViewTLSData'
@@ -78,15 +82,15 @@ void PropertyPageHandler_TLS::OnInitDialog()
 		item.iSubItem = 0;
 		item.mask = LVIF_TEXT;
 		item.pszText = (LPTSTR) TLSItemsInfo[i].szText.c_str();
-		ListView_InsertItem(hListViewTLSData, &item);
+		ListView_InsertItem(m_hListViewTLSData, &item);
 
 		item.iSubItem = 1;
 		item.pszText = (LPTSTR) TLSItemsInfo[i].szData.c_str();
-		ListView_SetItem(hListViewTLSData, &item);
+		ListView_SetItem(m_hListViewTLSData, &item);
 
 		item.iSubItem = 2;
 		item.pszText = (LPTSTR) TLSItemsInfo[i].szComments.c_str();
-		ListView_SetItem(hListViewTLSData, &item);
+		ListView_SetItem(m_hListViewTLSData, &item);
 	}
 
 	// Insert ListView items for 'hListViewCallbacks'
@@ -110,12 +114,12 @@ void PropertyPageHandler_TLS::OnInitDialog()
 				item.mask = LVIF_TEXT;
 				dummy = DWORD_toString(i);
 				item.pszText = (LPTSTR) dummy.c_str();
-				ListView_InsertItem(hListViewCallbacks, &item);
+				ListView_InsertItem(m_hListViewCallbacks, &item);
 
 				item.iSubItem = 1;
 				dummy = DWORD_toString(Callback, Hexadecimal);
 				item.pszText = (LPTSTR) dummy.c_str();
-				ListView_SetItem(hListViewCallbacks, &item);
+				ListView_SetItem(m_hListViewCallbacks, &item);
 
 				Callback = ((LPDWORD) m_PEReaderWriter.GetVA(pTLSData->AddressOfCallBacks - pNTheaders32->OptionalHeader.ImageBase))[++i];
 			}
@@ -138,12 +142,12 @@ void PropertyPageHandler_TLS::OnInitDialog()
 				item.mask = LVIF_TEXT;
 				dummy = QWORD_toString(i);
 				item.pszText = (LPTSTR) dummy.c_str();
-				ListView_InsertItem(hListViewCallbacks, &item);
+				ListView_InsertItem(m_hListViewCallbacks, &item);
 
 				item.iSubItem = 1;
 				dummy = QWORD_toString(Callback, Hexadecimal);
 				item.pszText = (LPTSTR) dummy.c_str();
-				ListView_SetItem(hListViewCallbacks, &item);
+				ListView_SetItem(m_hListViewCallbacks, &item);
 
 				Callback = ((PULONGLONG) m_PEReaderWriter.GetVA((DWORD) (pTLSData->AddressOfCallBacks - pNTheaders64->OptionalHeader.ImageBase)))[++i];
 			}
@@ -154,9 +158,9 @@ void PropertyPageHandler_TLS::OnInitDialog()
 
 	// Resize columns for 'hListViewTLSData'
 	for (unsigned int i = 0; i < GetArraySize(GenericColumnText); i++)
-		ListView_SetColumnWidth(hListViewTLSData, i, i == GetArraySize(GenericColumnText) - 1 ? LVSCW_AUTOSIZE_USEHEADER : LVSCW_AUTOSIZE);
+		ListView_SetColumnWidth(m_hListViewTLSData, i, i == GetArraySize(GenericColumnText) - 1 ? LVSCW_AUTOSIZE_USEHEADER : LVSCW_AUTOSIZE);
 
 	// Resize columns for 'hListViewCallbacks'
 	for (unsigned int i = 0; i < GetArraySize(CallbacksColumnText); i++)
-		ListView_SetColumnWidth(hListViewCallbacks, i, LVSCW_AUTOSIZE_USEHEADER);
+		ListView_SetColumnWidth(m_hListViewCallbacks, i, LVSCW_AUTOSIZE_USEHEADER);
 }

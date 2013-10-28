@@ -35,7 +35,7 @@ class PropertyPageHandler abstract
 protected:
 	HWND m_hWnd;
 	unique_ptr<SimpleLayoutManager> m_pLayoutManager;
-	PEReadWrite& m_PEReaderWriter;
+	PEReadWrite m_PEReaderWriter;
 
 	// 'TextAndData' struct used to hold generic list view description, data and annotation
 	struct TextAndData
@@ -83,18 +83,17 @@ public:
 class PropertyPageHandler_MSDOSHeader : public PropertyPageHandler
 {
 private:
-	HWND hListViewMSDOSHeader;
-	HWND hEditMSDOSstub;
+	HWND m_hListViewMSDOSHeader;
+	HWND m_hEditMSDOSstub;
 
-	vector<RTTI::GenericTooltip> TooltipInfo;
-	vector<PropertyPageHandler::TextAndData> ItemsInfo;
+	vector<RTTI::GenericTooltip> m_TooltipInfo;
+	vector<PropertyPageHandler::TextAndData> m_ItemsInfo;
 
 	tstring lstMSDOSHeader_OnGetTooltip(int Index);
 	void lstMSDOSHeader_OnContextMenu(LONG x, LONG y, int Index);
 
 public:
-	PropertyPageHandler_MSDOSHeader(HWND hWnd, PEReadWrite& PEReaderWriter)
-		: PropertyPageHandler(hWnd, PEReaderWriter) {}
+	PropertyPageHandler_MSDOSHeader(HWND hWnd, PEReadWrite& PEReaderWriter);
 
 	void OnInitDialog();
 	void OnNotify(UINT NotificationCode, UINT_PTR ControlID, HWND hControl, LPARAM lParam);
@@ -104,10 +103,13 @@ public:
 class PropertyPageHandler_PEHeaders : public PropertyPageHandler
 {
 private:
-	vector<RTTI::GenericTooltip> COFFTooltipInfo;
-	vector<RTTI::GenericTooltip> OptionalTooltipInfo;
-	vector<PropertyPageHandler::TextAndData> COFFItemsInfo;
-	vector<PropertyPageHandler::TextAndData> OptionalItemsInfo;
+	HWND m_hListViewCOFFHeader;
+	HWND m_hListViewOptionalHeader;
+
+	vector<RTTI::GenericTooltip> m_COFFTooltipInfo;
+	vector<RTTI::GenericTooltip> m_OptionalTooltipInfo;
+	vector<PropertyPageHandler::TextAndData> m_COFFItemsInfo;
+	vector<PropertyPageHandler::TextAndData> m_OptionalItemsInfo;
 
 	tstring lstCOFFHeader_OnGetTooltip(int Index);
 	tstring lstOptionalHeader_OnGetTooltip(int Index);
@@ -115,8 +117,7 @@ private:
 	void lstOptionalHeader_OnContextMenu(LONG x, LONG y, int Index);
 
 public:
-	PropertyPageHandler_PEHeaders(HWND hWnd, PEReadWrite& PEReaderWriter)
-		: PropertyPageHandler(hWnd, PEReaderWriter) {}
+	PropertyPageHandler_PEHeaders(HWND hWnd, PEReadWrite& PEReaderWriter);
 
 	void OnInitDialog();
 	void OnNotify(UINT NotificationCode, UINT_PTR ControlID, HWND hControl, LPARAM lParam);
@@ -126,18 +127,17 @@ public:
 class PropertyPageHandler_Sections : public PropertyPageHandler
 {
 private:
-	HWND hTabsSections;
-	HWND hListViewSections;
-	vector<RTTI::GenericTooltip> SectionTooltipInfo;
-	vector<PropertyPageHandler::TextAndData> SectionInfo;
+	HWND m_hTabsSections;
+	HWND m_hListViewSections;
+	vector<RTTI::GenericTooltip> m_SectionTooltipInfo;
+	vector<PropertyPageHandler::TextAndData> m_SectionInfo;
 
 	void tabsSections_OnTabChanged(HWND hControl, int SelectedIndex);
 	tstring lstSections_OnGetTooltip(int Index);
 	void lstSections_OnContextMenu(LONG x, LONG y, int Index);
 
 public:
-	PropertyPageHandler_Sections(HWND hWnd, PEReadWrite& PEReaderWriter)
-		: PropertyPageHandler(hWnd, PEReaderWriter) {}
+	PropertyPageHandler_Sections(HWND hWnd, PEReadWrite& PEReaderWriter);
 
 	void OnInitDialog();
 	void OnNotify(UINT NotificationCode, UINT_PTR ControlID, HWND hControl, LPARAM lParam);
@@ -147,12 +147,16 @@ public:
 class PropertyPageHandler_Manifest : public PropertyPageHandler
 {
 private:
+	HWND m_hStaticManifestSource;
+	HWND m_hComboManifestName;
+	HWND m_hComboManifestLang;
+	HWND m_hEditManifest;
+
 	void cmbManifestName_OnSelectionChanged(HWND hControl, int SelectedIndex);
 	void cmbManifestLang_OnSelectionChanged(HWND hControl, int SelectedIndex);
 
 public:
-	PropertyPageHandler_Manifest(HWND hWnd, PEReadWrite& PEReaderWriter)
-		: PropertyPageHandler(hWnd, PEReaderWriter) {}
+	PropertyPageHandler_Manifest(HWND hWnd, PEReadWrite& PEReaderWriter);
 
 	void OnInitDialog();
 	void OnCommand(WORD NotificationCode, WORD ControlID, HWND hControl);
@@ -164,19 +168,19 @@ class PropertyPageHandler_Imports : public PropertyPageHandler
 private:
 	enum TabPages { TabImports, TabDirTable };
 
-	HWND hListViewImportsModules;
-	HWND hTabsImports;
-	HWND hListViewImportsAndDirTable;
-	HWND hCheckBoxCPPNameUnmangle;
+	HWND m_hListViewImportsModules;
+	HWND m_hTabsImports;
+	HWND m_hListViewImportsAndDirTable;
+	HWND m_hCheckBoxCPPNameUnmangle;
 
-	vector<PEReadWrite::ImportNameType> lstModules;
-	DWORD NoOfStaticImportModules;
-	vector<PEReadWrite::ImportFunction> lstFunctions;
-	vector<PropertyPageHandler::TextAndData> ImportsDirInfo;
-	vector<RTTI::GenericTooltip> ImportsDirTooltipInfo;
-	TabPages TabPage;
-	SortOrder lstModulesSortOrder;
-	SortOrder lstImportsSortOrder;
+	vector<PEReadWrite::ImportNameType> m_lstModules;
+	DWORD m_NoOfStaticImportModules;
+	vector<PEReadWrite::ImportFunction> m_lstFunctions;
+	vector<PropertyPageHandler::TextAndData> m_ImportsDirInfo;
+	vector<RTTI::GenericTooltip> m_ImportsDirTooltipInfo;
+	TabPages m_TabPage;
+	SortOrder m_lstModulesSortOrder;
+	SortOrder m_lstImportsSortOrder;
 
 	void chkImportsUnmangleCPPNames_OnClick(HWND hControl, bool bChecked);
 	void lstImportsModules_OnSelection(HWND hControl, int SelectedIndex);
@@ -190,11 +194,7 @@ private:
 									bool ChkBoxUnmangle_Changed);
 
 public:
-	PropertyPageHandler_Imports(HWND hWnd, PEReadWrite& PEReaderWriter)
-		: PropertyPageHandler(hWnd, PEReaderWriter),
-			TabPage(TabImports),
-			lstModulesSortOrder(None),
-			lstImportsSortOrder(None) {}
+	PropertyPageHandler_Imports(HWND hWnd, PEReadWrite& PEReaderWriter);
 
 	void OnInitDialog();
 	void OnCommand(WORD NotificationCode, WORD ControlID, HWND hControl);
@@ -216,15 +216,15 @@ private:
 			: RVA(rva), Name(name), Ordinal(ordinal), Forwarder(forwarder) { }
 	};
 
-	HWND hListViewExportDir;
-	HWND hListViewExports;
-	HWND hCheckBoxCPPNameUnmangle;
+	HWND m_hListViewExportDir;
+	HWND m_hListViewExports;
+	HWND m_hCheckBoxCPPNameUnmangle;
 
-	vector<pair<WORD, string> > lstOrdinalsAndNames;
-	vector<DWORD> lstExportRVAs;
-	vector<PropertyPageHandler::TextAndData> ExportDirInfo;
-	vector<RTTI::GenericTooltip> ExportDirTooltipInfo;
-	SortOrder lstExportsSortOrder;
+	vector<pair<WORD, string> > m_lstOrdinalsAndNames;
+	vector<DWORD> m_lstExportRVAs;
+	vector<PropertyPageHandler::TextAndData> m_ExportDirInfo;
+	vector<RTTI::GenericTooltip> m_ExportDirTooltipInfo;
+	SortOrder m_lstExportsSortOrder;
 
 	tstring lstExportDir_OnGetTooltip(int Index);
 	void lstExportDir_OnContextMenu(LONG x, LONG y, int Index);
@@ -233,9 +233,7 @@ private:
 	void ExportsPage_UpdateDisplay(bool ChkBoxUnmangle_Checked);
 
 public:
-	PropertyPageHandler_Exports(HWND hWnd, PEReadWrite& PEReaderWriter)
-		: PropertyPageHandler(hWnd, PEReaderWriter),
-			lstExportsSortOrder(None) {}
+	PropertyPageHandler_Exports(HWND hWnd, PEReadWrite& PEReaderWriter);
 
 	void OnInitDialog();
 	void OnCommand(WORD NotificationCode, WORD ControlID, HWND hControl);
@@ -245,9 +243,14 @@ public:
 // For Resources page
 class PropertyPageHandler_Resources : public PropertyPageHandler
 {
+private:
+	HWND m_hComboResourceName;
+	HWND m_hComboResourceLang;
+	HWND m_hListResourceType;
+	HWND m_hStaticResourcePreview;
+
 public:
-	PropertyPageHandler_Resources(HWND hWnd, PEReadWrite& PEReaderWriter)
-		: PropertyPageHandler(hWnd, PEReaderWriter) {}
+	PropertyPageHandler_Resources(HWND hWnd, PEReadWrite& PEReaderWriter);
 
 	void OnInitDialog();
 };
@@ -256,13 +259,12 @@ public:
 class PropertyPageHandler_ExceptionHandling : public PropertyPageHandler
 {
 private:
-	HWND hEditExceptions;
+	HWND m_hEditExceptions;
 
 	void tabsExceptionHandlers_OnTabChanged(HWND hControl, int SelectedIndex);
 
 public:
-	PropertyPageHandler_ExceptionHandling(HWND hWnd, PEReadWrite& PEReaderWriter)
-		: PropertyPageHandler(hWnd, PEReaderWriter) {}
+	PropertyPageHandler_ExceptionHandling(HWND hWnd, PEReadWrite& PEReaderWriter);
 
 	void OnInitDialog();
 };
@@ -271,20 +273,19 @@ public:
 class PropertyPageHandler_BaseReloc : public PropertyPageHandler
 {
 private:
-	HWND hTabsBaseReloc;
-	HWND hListViewBaseRelocTable;
-	HWND hEditFixupEntries;
+	HWND m_hTabsBaseReloc;
+	HWND m_hListViewBaseRelocTable;
+	HWND m_hEditFixupEntries;
 
-	vector<PropertyPageHandler::TextAndData> BaseRelocInfo;
-	vector<RTTI::GenericTooltip> BaseRelocTooltipInfo;
+	vector<PropertyPageHandler::TextAndData> m_BaseRelocInfo;
+	vector<RTTI::GenericTooltip> m_BaseRelocTooltipInfo;
 
 	tstring lstBaseRelocTable_OnGetTooltip(int Index);
 	void lstBaseRelocTable_OnContextMenu(LONG x, LONG y, int Index);
 	void tabsBaseRelocations_OnTabChanged(HWND hControl, int SelectedIndex);
 
 public:
-	PropertyPageHandler_BaseReloc(HWND hWnd, PEReadWrite& PEReaderWriter)
-		: PropertyPageHandler(hWnd, PEReaderWriter) {}
+	PropertyPageHandler_BaseReloc(HWND hWnd, PEReadWrite& PEReaderWriter);
 
 	void OnInitDialog();
 	void OnNotify(UINT NotificationCode, UINT_PTR ControlID, HWND hControl, LPARAM lParam);
@@ -294,20 +295,19 @@ public:
 class PropertyPageHandler_Debug : public PropertyPageHandler
 {
 private:
-	HWND hTabsDebugDirs;
-	HWND hListViewDebugDir;
-	HWND hEditDebugData;
+	HWND m_hTabsDebugDirs;
+	HWND m_hListViewDebugDir;
+	HWND m_hEditDebugData;
 
-	vector<PropertyPageHandler::TextAndData> DebugDirInfo;
-	vector<RTTI::GenericTooltip> DebugDirTooltipInfo;
+	vector<PropertyPageHandler::TextAndData> m_DebugDirInfo;
+	vector<RTTI::GenericTooltip> m_DebugDirTooltipInfo;
 
 	tstring lstDebugDir_OnGetTooltip(int Index);
 	void lstDebugDir_OnContextMenu(LONG x, LONG y, int Index);
 	void tabsDebugDirs_OnTabChanged(HWND hControl, int SelectedIndex);
 
 public:
-	PropertyPageHandler_Debug(HWND hWnd, PEReadWrite& PEReaderWriter)
-		: PropertyPageHandler(hWnd, PEReaderWriter) {}
+	PropertyPageHandler_Debug(HWND hWnd, PEReadWrite& PEReaderWriter);
 
 	void OnInitDialog();
 	void OnNotify(UINT NotificationCode, UINT_PTR ControlID, HWND hControl, LPARAM lParam);
@@ -317,11 +317,13 @@ public:
 class PropertyPageHandler_TLS : public PropertyPageHandler
 {
 private:
+	HWND m_hListViewTLSData;
+	HWND m_hListViewCallbacks;
+
 	void tabsTLSCallbacksIndexes_OnTabChanged(HWND hControl, int SelectedIndex);
 
 public:
-	PropertyPageHandler_TLS(HWND hWnd, PEReadWrite& PEReaderWriter)
-		: PropertyPageHandler(hWnd, PEReaderWriter) {}
+	PropertyPageHandler_TLS(HWND hWnd, PEReadWrite& PEReaderWriter);
 
 	void OnInitDialog();
 };
@@ -330,18 +332,17 @@ public:
 class PropertyPageHandler_LoadConfiguration : public PropertyPageHandler
 {
 private:
-	HWND hListViewLoadConfig;
-	HWND hListViewSEH;
+	HWND m_hListViewLoadConfig;
+	HWND m_hListViewSEH;
 
-	vector<RTTI::GenericTooltip> LoadConfigTooltipInfo;
-	vector<PropertyPageHandler::TextAndData> LoadConfigItemsInfo;
+	vector<RTTI::GenericTooltip> m_LoadConfigTooltipInfo;
+	vector<PropertyPageHandler::TextAndData> m_LoadConfigItemsInfo;
 
 	tstring lstLoadConfig_OnGetTooltip(int Index);
 	void lstLoadConfig_OnContextMenu(LONG x, LONG y, int Index);
 
 public:
-	PropertyPageHandler_LoadConfiguration(HWND hWnd, PEReadWrite& PEReaderWriter)
-		: PropertyPageHandler(hWnd, PEReaderWriter) {}
+	PropertyPageHandler_LoadConfiguration(HWND hWnd, PEReadWrite& PEReaderWriter);
 
 	void OnInitDialog();
 	void OnNotify(UINT NotificationCode, UINT_PTR ControlID, HWND hControl, LPARAM lParam);
@@ -351,15 +352,14 @@ public:
 class PropertyPageHandler_CLR : public PropertyPageHandler
 {
 private:
-	HWND hTabsCLRData;
-	HWND hListViewCLRData;
-	HWND hEditCLRData;
+	HWND m_hTabsCLRData;
+	HWND m_hListViewCLRData;
+	HWND m_hEditCLRData;
 
 	void tabsCLRData_OnTabChanged(HWND hControl, int SelectedIndex);
 
 public:
-	PropertyPageHandler_CLR(HWND hWnd, PEReadWrite& PEReaderWriter)
-		: PropertyPageHandler(hWnd, PEReaderWriter) {}
+	PropertyPageHandler_CLR(HWND hWnd, PEReadWrite& PEReaderWriter);
 
 	void OnInitDialog();
 	void OnNotify(UINT NotificationCode, UINT_PTR ControlID, HWND hControl, LPARAM lParam);
@@ -404,30 +404,26 @@ private:
 
 	static const int SELECTION_RECT_ADDR_X = MARGIN_X + MEMORYLAYOUT_X + MEMORYLAYOUT_WIDTH - 4;
 
-	ULONG_PTR gdiplusToken;
-	Bitmap *pbitmapMemoryMap;
-	DWORD HighestRVA;
-	vector<SelectionRectData> vectorSelectionRects;
-	int SelectionRectIndex;
-	HTREEITEM hTreeViewCustomItem;
+	ULONG_PTR m_gdiplusToken;
+	Bitmap *m_pbitmapMemoryMap;
+	DWORD m_HighestRVA;
+	vector<SelectionRectData> m_vectorSelectionRects;
+	int m_SelectionRectIndex;
+	HTREEITEM m_hTreeViewCustomItem;
 
-	HWND hTreeViewLegends;
-	HWND hStaticCustom;
-	HWND hStaticCustomRVA;
-	HWND hStaticCustomSize;
-	HWND hEditCustomRVA;
-	HWND hEditCustomSize;
+	HWND m_hTreeViewLegends;
+	HWND m_hStaticCustom;
+	HWND m_hStaticCustomRVA;
+	HWND m_hStaticCustomSize;
+	HWND m_hEditCustomRVA;
+	HWND m_hEditCustomSize;
 
 	void tvwLegends_OnSelection(HWND hControl, NMTVITEMCHANGE *pItemChange);
 	void txtCustomRVA_OnLostFocus(HWND hControl);
 	void txtCustomSize_OnLostFocus(HWND hControl);
 
 public:
-	PropertyPageHandler_Overview(HWND hWnd, PEReadWrite& PEReaderWriter)
-		: PropertyPageHandler(hWnd, PEReaderWriter),
-			gdiplusToken(0), pbitmapMemoryMap(NULL),
-			HighestRVA(0), SelectionRectIndex(-1),
-			hTreeViewCustomItem(NULL) {}
+	PropertyPageHandler_Overview(HWND hWnd, PEReadWrite& PEReaderWriter);
 
 	void OnInitDialog();
 	void OnShowWindow();
@@ -441,24 +437,23 @@ public:
 class PropertyPageHandler_Tools : public PropertyPageHandler
 {
 private:
-	HWND hComboConvertAddrFrom;
-	HWND hEditConvertAddrFrom;
-	HWND hComboConvertAddrTo;
-	HWND hEditConvertAddrTo;
-	HWND hBtnConvertAddr;
-	HWND hEditSHA1Hash;
-	HWND hEditMD5Hash;
-	HWND hEditVerifyHash;
+	HWND m_hComboConvertAddrFrom;
+	HWND m_hEditConvertAddrFrom;
+	HWND m_hComboConvertAddrTo;
+	HWND m_hEditConvertAddrTo;
+	HWND m_hBtnConvertAddr;
+	HWND m_hEditSHA1Hash;
+	HWND m_hEditMD5Hash;
+	HWND m_hEditVerifyHash;
 
-	HBRUSH hbrushGreen;
-	HBRUSH hbrushRed;
+	HBRUSH m_hbrushGreen;
+	HBRUSH m_hbrushRed;
 
-	HANDLE hbitmapCorrect;
-	HANDLE hbitmapIncorrect;
+	HANDLE m_hbitmapCorrect;
+	HANDLE m_hbitmapIncorrect;
 
 public:
-	PropertyPageHandler_Tools(HWND hWnd, PEReadWrite& PEReaderWriter)
-		: PropertyPageHandler(hWnd, PEReaderWriter) {}
+	PropertyPageHandler_Tools(HWND hWnd, PEReadWrite& PEReaderWriter);
 
 	void OnInitDialog();
 	void OnCommand(WORD NotificationCode, WORD ControlID, HWND hControl);

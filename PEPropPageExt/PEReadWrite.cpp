@@ -142,6 +142,12 @@ void PEReadWrite::Close()
 
 
 ///////////////////////////////// Utility functions /////////////////////////////////
+bool PEReadWrite::IsMemoryReadable(void *ptr, DWORD size)
+{
+	return reinterpret_cast<UINT_PTR>(ptr) >= reinterpret_cast<UINT_PTR>(m_pMapViewBaseAddress) &&
+			reinterpret_cast<UINT_PTR>(ptr) + size < reinterpret_cast<UINT_PTR>(m_pMapViewBaseAddress) + GetFileSize().QuadPart;
+}
+
 void *PEReadWrite::FileOffsetToMemAddress(DWORD offset)
 {
 	return (void *) (reinterpret_cast<UINT_PTR>(m_pMapViewBaseAddress) + offset);

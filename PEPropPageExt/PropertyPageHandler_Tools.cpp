@@ -2,36 +2,40 @@
 #include <sstream>
 
 
-void PropertyPageHandler_Tools::OnInitDialog()
+PropertyPageHandler_Tools::PropertyPageHandler_Tools(HWND hWnd, PEReadWrite& PEReaderWriter)
+		: PropertyPageHandler(hWnd, PEReaderWriter)
 {
-	hComboConvertAddrFrom = GetDlgItem(m_hWnd, IDC_CMBCONVERTADDRFROM);
-	hEditConvertAddrFrom = GetDlgItem(m_hWnd, IDC_EDITCONVERTADDRFROM);
-	hComboConvertAddrTo = GetDlgItem(m_hWnd, IDC_CMBCONVERTADDRTO);
-	hEditConvertAddrTo = GetDlgItem(m_hWnd, IDC_EDITCONVERTADDRTO);
-	hBtnConvertAddr = GetDlgItem(m_hWnd, IDC_BTNCONVERTADDR);
-	hEditSHA1Hash = GetDlgItem(m_hWnd, IDC_EDITSHA1HASH);
-	hEditMD5Hash = GetDlgItem(m_hWnd, IDC_EDITMD5HASH);
-	hEditVerifyHash = GetDlgItem(m_hWnd, IDC_EDITVERIFYHASH);
+	m_hComboConvertAddrFrom = GetDlgItem(m_hWnd, IDC_CMBCONVERTADDRFROM);
+	m_hEditConvertAddrFrom = GetDlgItem(m_hWnd, IDC_EDITCONVERTADDRFROM);
+	m_hComboConvertAddrTo = GetDlgItem(m_hWnd, IDC_CMBCONVERTADDRTO);
+	m_hEditConvertAddrTo = GetDlgItem(m_hWnd, IDC_EDITCONVERTADDRTO);
+	m_hBtnConvertAddr = GetDlgItem(m_hWnd, IDC_BTNCONVERTADDR);
+	m_hEditSHA1Hash = GetDlgItem(m_hWnd, IDC_EDITSHA1HASH);
+	m_hEditMD5Hash = GetDlgItem(m_hWnd, IDC_EDITMD5HASH);
+	m_hEditVerifyHash = GetDlgItem(m_hWnd, IDC_EDITVERIFYHASH);
 
 	// Set items for combo boxes
-	ComboBox_AddString(hComboConvertAddrFrom, _T("RVA"));
-	ComboBox_AddString(hComboConvertAddrFrom, _T("File offset"));
-	ComboBox_AddString(hComboConvertAddrTo, _T("RVA"));
-	ComboBox_AddString(hComboConvertAddrTo, _T("File offset"));
+	ComboBox_AddString(m_hComboConvertAddrFrom, _T("RVA"));
+	ComboBox_AddString(m_hComboConvertAddrFrom, _T("File offset"));
+	ComboBox_AddString(m_hComboConvertAddrTo, _T("RVA"));
+	ComboBox_AddString(m_hComboConvertAddrTo, _T("File offset"));
 
 	// Select first items for combo boxes
-	ComboBox_SetCurSel(hComboConvertAddrFrom, 0);
-	ComboBox_SetCurSel(hComboConvertAddrTo, 1);
+	ComboBox_SetCurSel(m_hComboConvertAddrFrom, 0);
+	ComboBox_SetCurSel(m_hComboConvertAddrTo, 1);
 
 	// Set default text for converter edit boxes
-	Edit_SetText(hEditConvertAddrFrom, _T("0x0"));
-	Edit_SetText(hEditConvertAddrTo, _T("0x0"));
-	Edit_SetText(hEditSHA1Hash, _T("Error calculating hash"));
-	Edit_SetText(hEditMD5Hash, _T("Error calculating hash"));
+	Edit_SetText(m_hEditConvertAddrFrom, _T("0x0"));
+	Edit_SetText(m_hEditConvertAddrTo, _T("0x0"));
+	Edit_SetText(m_hEditSHA1Hash, _T("Error calculating hash"));
+	Edit_SetText(m_hEditMD5Hash, _T("Error calculating hash"));
 
 	// Set tooltips
-	Edit_SetCueBannerText(hEditVerifyHash, _T("Enter a SHA1/MD5 hash here to verify"));
+	Edit_SetCueBannerText(m_hEditVerifyHash, _T("Enter a SHA1/MD5 hash here to verify"));
+}
 
+void PropertyPageHandler_Tools::OnInitDialog()
+{
 	// Initialize Windows Crypt API
 	HCRYPTPROV hCryptProv = NULL;
 	HCRYPTHASH hHash = NULL;
@@ -52,15 +56,15 @@ void PropertyPageHandler_Tools::OnInitDialog()
 					CryptGetHashParam(hHash, HP_HASHVAL, pHash.get(), &dwHashLen, 0);
 
 					for (DWORD i = 0; i < dwHashLen; i++)
-						_stprintf(&szHash.get()[i * 2], _T("%02x"), pHash.get()[i]);
+						_stprintf_s(&szHash.get()[i * 2], 3, _T("%02x"), pHash.get()[i]);
 
 					// NOTE: 'szHash' is already null terminated
 
-					Edit_SetText(hEditSHA1Hash, szHash.get());
+					Edit_SetText(m_hEditSHA1Hash, szHash.get());
 				}
 
 		// Release handle
-		if(hHash) CryptDestroyHash(hHash);
+		if (hHash) CryptDestroyHash(hHash);
 
 		// Create MD5 hash object
 		if (CryptCreateHash(hCryptProv, CALG_MD5, 0, 0, &hHash))
@@ -74,9 +78,9 @@ void PropertyPageHandler_Tools::OnInitDialog()
 					CryptGetHashParam(hHash, HP_HASHVAL, pHash.get(), &dwHashLen, 0);
 
 					for (DWORD i = 0; i < dwHashLen; i++)
-						_stprintf(&szHash.get()[i * 2], _T("%02x"), pHash.get()[i]);
+						_stprintf_s(&szHash.get()[i * 2], 3, _T("%02x"), pHash.get()[i]);
 
-					Edit_SetText(hEditMD5Hash, szHash.get());
+					Edit_SetText(m_hEditMD5Hash, szHash.get());
 				}
 
 		// Release handles
@@ -85,25 +89,25 @@ void PropertyPageHandler_Tools::OnInitDialog()
 	}
 
 	// Prepare brushes
-	hbrushGreen = CreateSolidBrush(RGB(0x00, 0xFF, 0x00));
-	hbrushRed = CreateSolidBrush(RGB(0xFF, 0x00, 0x00));
+	m_hbrushGreen = CreateSolidBrush(RGB(0x00, 0xFF, 0x00));
+	m_hbrushRed = CreateSolidBrush(RGB(0xFF, 0x00, 0x00));
 
 	// Load bitmap
-	hbitmapCorrect = LoadImage(GetWindowInstance(m_hWnd), MAKEINTRESOURCE(IDB_BITMAPCORRECT), IMAGE_BITMAP, 0, 0, LR_LOADTRANSPARENT);
-	hbitmapIncorrect = LoadImage(GetWindowInstance(m_hWnd), MAKEINTRESOURCE(IDB_BITMAPINCORRECT), IMAGE_BITMAP, 0, 0, LR_LOADTRANSPARENT);
+	m_hbitmapCorrect = LoadImage(GetWindowInstance(m_hWnd), MAKEINTRESOURCE(IDB_BITMAPCORRECT), IMAGE_BITMAP, 0, 0, LR_LOADTRANSPARENT);
+	m_hbitmapIncorrect = LoadImage(GetWindowInstance(m_hWnd), MAKEINTRESOURCE(IDB_BITMAPINCORRECT), IMAGE_BITMAP, 0, 0, LR_LOADTRANSPARENT);
 }
 
 void PropertyPageHandler_Tools::btnConvertAddr_OnClick()
 {
-	int ConvertAddrFrom_Index = ComboBox_GetCurSel(hComboConvertAddrFrom);
-	int ConvertAddrTo_Index = ComboBox_GetCurSel(hComboConvertAddrTo);
+	int ConvertAddrFrom_Index = ComboBox_GetCurSel(m_hComboConvertAddrFrom);
+	int ConvertAddrTo_Index = ComboBox_GetCurSel(m_hComboConvertAddrTo);
 	TCHAR szBufferAddrFrom[64];
 
-	Edit_GetText(hEditConvertAddrFrom, szBufferAddrFrom, GetArraySize(szBufferAddrFrom));
+	Edit_GetText(m_hEditConvertAddrFrom, szBufferAddrFrom, GetArraySize(szBufferAddrFrom));
 
 	if (ConvertAddrFrom_Index == ConvertAddrTo_Index)
 	{
-		Edit_SetText(hComboConvertAddrTo, szBufferAddrFrom);
+		Edit_SetText(m_hComboConvertAddrTo, szBufferAddrFrom);
 
 		return;
 	}
@@ -118,13 +122,13 @@ void PropertyPageHandler_Tools::btnConvertAddr_OnClick()
 	{
 	case 0:	// From RVA
 		// To File offset
-		Edit_SetText(hEditConvertAddrTo, DWORD_toString(m_PEReaderWriter.RVAToFileOffset(BufferAddrFrom), Hexadecimal).c_str());
+		Edit_SetText(m_hEditConvertAddrTo, DWORD_toString(m_PEReaderWriter.RVAToFileOffset(BufferAddrFrom), Hexadecimal).c_str());
 
 		break;
 
 	case 1:	// From File offset
 		// To RVA
-		Edit_SetText(hEditConvertAddrTo, DWORD_toString(m_PEReaderWriter.FileOffsetToRVA(BufferAddrFrom), Hexadecimal).c_str());
+		Edit_SetText(m_hEditConvertAddrTo, DWORD_toString(m_PEReaderWriter.FileOffsetToRVA(BufferAddrFrom), Hexadecimal).c_str());
 	}
 }
 
@@ -134,7 +138,7 @@ void PropertyPageHandler_Tools::txtVerifyHash_Changed()
 	tstring SourceHash, DestHash;
 
 	// Get source hash
-	Edit_GetText(hEditVerifyHash, szBuffer, GetArraySize(szBuffer));
+	Edit_GetText(m_hEditVerifyHash, szBuffer, GetArraySize(szBuffer));
 	SourceHash = szBuffer;
 
 	if (SourceHash.empty())
@@ -145,27 +149,27 @@ void PropertyPageHandler_Tools::txtVerifyHash_Changed()
 	}
 
 	// Get SHA1 hash
-	Edit_GetText(hEditSHA1Hash, szBuffer, GetArraySize(szBuffer));
+	Edit_GetText(m_hEditSHA1Hash, szBuffer, GetArraySize(szBuffer));
 	DestHash = szBuffer;
 
 	if (SourceHash == DestHash)
 	{
-		SendDlgItemMessage(m_hWnd, IDC_IMGVERIFY, STM_SETIMAGE, (WPARAM) IMAGE_BITMAP, (LPARAM) hbitmapCorrect);
+		SendDlgItemMessage(m_hWnd, IDC_IMGVERIFY, STM_SETIMAGE, (WPARAM) IMAGE_BITMAP, (LPARAM) m_hbitmapCorrect);
 
 		return;
 	}
 
 	// Get MD5 hash
-	Edit_GetText(hEditMD5Hash, szBuffer, GetArraySize(szBuffer));
+	Edit_GetText(m_hEditMD5Hash, szBuffer, GetArraySize(szBuffer));
 	DestHash = szBuffer;
 
 	if (SourceHash == DestHash)
 	{
-		SendDlgItemMessage(m_hWnd, IDC_IMGVERIFY, STM_SETIMAGE, (WPARAM) IMAGE_BITMAP, (LPARAM) hbitmapCorrect);
+		SendDlgItemMessage(m_hWnd, IDC_IMGVERIFY, STM_SETIMAGE, (WPARAM) IMAGE_BITMAP, (LPARAM) m_hbitmapCorrect);
 
 		return;
 	}
 
 	// Else
-	SendDlgItemMessage(m_hWnd, IDC_IMGVERIFY, STM_SETIMAGE, (WPARAM) IMAGE_BITMAP, (LPARAM) hbitmapIncorrect);
+	SendDlgItemMessage(m_hWnd, IDC_IMGVERIFY, STM_SETIMAGE, (WPARAM) IMAGE_BITMAP, (LPARAM) m_hbitmapIncorrect);
 }

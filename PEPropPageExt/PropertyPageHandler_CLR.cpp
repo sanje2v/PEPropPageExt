@@ -3,30 +3,34 @@
 #include <algorithm>
 
 
-void PropertyPageHandler_CLR::OnInitDialog()
+PropertyPageHandler_CLR::PropertyPageHandler_CLR(HWND hWnd, PEReadWrite& PEReaderWriter)
+		: PropertyPageHandler(hWnd, PEReaderWriter)
 {
-	hTabsCLRData = GetDlgItem(m_hWnd, IDC_TABSCLRDATA);
-	hListViewCLRData = GetDlgItem(m_hWnd, IDC_LISTCLRDATA);
-	hEditCLRData = GetDlgItem(m_hWnd, IDC_EDITCLRDATA);
+	m_hTabsCLRData = GetDlgItem(m_hWnd, IDC_TABSCLRDATA);
+	m_hListViewCLRData = GetDlgItem(m_hWnd, IDC_LISTCLRDATA);
+	m_hEditCLRData = GetDlgItem(m_hWnd, IDC_EDITCLRDATA);
 
 	// Setup controls with layout manager
 	m_pLayoutManager->AddChildConstraint(IDC_TABSCLRDATA, CWA_LEFTRIGHT, CWA_TOPBOTTOM);
 	m_pLayoutManager->AddChildConstraint(IDC_LISTCLRDATA, CWA_LEFTRIGHT, CWA_TOPBOTTOM);
 	m_pLayoutManager->AddChildConstraint(IDC_EDITCLRDATA, CWA_LEFTRIGHT, CWA_BOTTOM);
 	// Make ZOrder: List view (On top) and Tab Control (On bottom)
-	SetWindowPos(hTabsCLRData, hListViewCLRData, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE);
-	SetWindowPos(hTabsCLRData, hEditCLRData, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE);
+	SetWindowPos(m_hTabsCLRData, m_hListViewCLRData, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE);
+	SetWindowPos(m_hTabsCLRData, m_hEditCLRData, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE);
 	// NOTE: ZOrder for 'hEditCLRData' is moved to 'tabsCLRData_OnTabChanged' due to repaint issue
 	
 	// Set full row selection style for list views
-	ListView_SetExtendedListViewStyleEx(hListViewCLRData,
+	ListView_SetExtendedListViewStyleEx(m_hListViewCLRData,
 										LVS_EX_FULLROWSELECT | LVS_EX_INFOTIP | LVS_EX_LABELTIP,
 										LVS_EX_FULLROWSELECT | LVS_EX_INFOTIP | LVS_EX_LABELTIP);
 	
 	// Set tab stop for rich edit
 	DWORD cTabs = 85;
-	Edit_SetTabStops(hEditCLRData, 1, &cTabs);
+	Edit_SetTabStops(m_hEditCLRData, 1, &cTabs);
+}
 
+void PropertyPageHandler_CLR::OnInitDialog()
+{
 	// Insert ListView columns for 'hListViewCLRData'
 	LV_COLUMN column;
 	ZeroMemory(&column, sizeof(LV_COLUMN));
@@ -35,7 +39,7 @@ void PropertyPageHandler_CLR::OnInitDialog()
 	{
 		column.mask = LVCF_TEXT;
 		column.pszText = GenericColumnText[i];
-		ListView_InsertColumn(hListViewCLRData, i, &column);
+		ListView_InsertColumn(m_hListViewCLRData, i, &column);
 	}
 
 	// Insert Tabs
@@ -52,11 +56,11 @@ void PropertyPageHandler_CLR::OnInitDialog()
         item.mask = TCIF_TEXT;
         item.pszText = (LPTSTR) SEHColumnText[i];
 
-        TabCtrl_InsertItem(hTabsCLRData, i, &item);
+        TabCtrl_InsertItem(m_hTabsCLRData, i, &item);
     }
 
 	// Select the first tab
-	tabsCLRData_OnTabChanged(hListViewCLRData, 0);
+	tabsCLRData_OnTabChanged(m_hListViewCLRData, 0);
 }
 
 void PropertyPageHandler_CLR::tabsCLRData_OnTabChanged(HWND hControl, int SelectedIndex)
@@ -64,7 +68,7 @@ void PropertyPageHandler_CLR::tabsCLRData_OnTabChanged(HWND hControl, int Select
 	vector<TextAndData> CLRDataItemsInfo;
 	PIMAGE_COR20_HEADER pCLRData = m_PEReaderWriter.GetCLRHeader();
 
-	ListView_DeleteAllItems(hListViewCLRData);
+	ListView_DeleteAllItems(m_hListViewCLRData);
 
 	switch (SelectedIndex)
 	{
@@ -76,7 +80,8 @@ void PropertyPageHandler_CLR::tabsCLRData_OnTabChanged(HWND hControl, int Select
 			FillData(CLRDataItemsInfo, _T("Metadata Address"), DWORD_toString(pCLRData->MetaData.VirtualAddress, Hexadecimal));
 			FillData(CLRDataItemsInfo, _T("Metadata Size"), DWORD_toString(pCLRData->MetaData.Size), FormattedBytesSize(pCLRData->MetaData.Size));
 			FillData(CLRDataItemsInfo, _T("Flags"), DWORD_toString(pCLRData->Flags, Hexadecimal), CorImageFlags_toString(pCLRData->Flags));
-			FillData(CLRDataItemsInfo, _T("Entry Point"), DWORD_toString(pCLRData->EntryPointRVA, Hexadecimal), (TestFlag(pCLRData->Flags, COMIMAGE_FLAGS_NATIVE_ENTRYPOINT) ? _T("Native RVA entry point") : _T("Managed token entry point")));
+			FillData(CLRDataItemsInfo, _T("Entry Point"), DWORD_toString(pCLRData->EntryPointRVA, Hexadecimal), (TestFlag(pCLRData->Flags, COMIMAGE_FLAGS_NATIVE_ENTRYPOINT) ?
+																													_T("Native RVA entry point") : _T("Managed token entry point")));
 			FillData(CLRDataItemsInfo, _T("Resources Address"), DWORD_toString(pCLRData->Resources.VirtualAddress, Hexadecimal));
 			FillData(CLRDataItemsInfo, _T("Resources Size"), DWORD_toString(pCLRData->Resources.Size), FormattedBytesSize(pCLRData->Resources.Size));
 			FillData(CLRDataItemsInfo, _T("Strong Name Address"), DWORD_toString(pCLRData->StrongNameSignature.VirtualAddress, Hexadecimal));
@@ -99,7 +104,8 @@ void PropertyPageHandler_CLR::tabsCLRData_OnTabChanged(HWND hControl, int Select
 			PMETA_DATA_SECTION_HEADER2 pMetaData2 = (PMETA_DATA_SECTION_HEADER2) (((UINT_PTR) &pMetaData1->Name) + pMetaData1->Length);
 
 			// Fill with data
-			FillData(CLRDataItemsInfo, _T("Signature"), DWORD_toString(pMetaData1->Signature, Hexadecimal), (pMetaData1->Signature == CLR_META_DATA_SIGNATURE ? _T("'BJSB'") : _T("Invalid Signature, must be 'BJSB'")));
+			FillData(CLRDataItemsInfo, _T("Signature"), DWORD_toString(pMetaData1->Signature, Hexadecimal), (pMetaData1->Signature == CLR_META_DATA_SIGNATURE ?
+																																_T("'BJSB'") : _T("Invalid Signature, must be 'BJSB'")));
 			FillData(CLRDataItemsInfo, _T("Version"), VersionNums_toString(pMetaData1->MajorVersion, pMetaData1->MinorVersion));
 			FillData(CLRDataItemsInfo, _T("Extra Data Offset"), DWORD_toString(pMetaData1->Reserved, Hexadecimal), _T("Reserved, must be zero"));
 			FillData(CLRDataItemsInfo, _T("Version String Length"), DWORD_toString(pMetaData1->Length));
@@ -156,7 +162,8 @@ void PropertyPageHandler_CLR::tabsCLRData_OnTabChanged(HWND hControl, int Select
 							EditBoxAnnotation += _T("Valid\t") + QWORD_toString(pMetaCompositeHeader->Valid, Hexadecimal) + _T("\tValid tables summarized below\n");
 							EditBoxAnnotation += _T("Sorted\t") + QWORD_toString(pMetaCompositeHeader->Sorted, Hexadecimal) + _T("\tTable sorting summarized below\n");
 							EditBoxAnnotation += _T("Rows\tn/a\tNo. of row entries summarized below\n\n");
-							EditBoxAnnotation += _T("Tables:\nName\tSorted?\tRow entries\n") + CorMetadataTablesSummary_toString(pMetaCompositeHeader->Valid, pMetaCompositeHeader->Sorted, pMetaCompositeHeader->Rows);
+							EditBoxAnnotation += _T("Tables:\nName\tSorted?\tRow entries\n") + CorMetadataTablesSummary_toString(pMetaCompositeHeader->Valid,
+													pMetaCompositeHeader->Sorted, pMetaCompositeHeader->Rows);
 							EditBoxAnnotation += _T("--------------------------------------------------------------------------------------------\n\n");
 
 							StreamNameAnnotation = _T("Contains metadata composite header");
@@ -170,7 +177,7 @@ void PropertyPageHandler_CLR::tabsCLRData_OnTabChanged(HWND hControl, int Select
 				}
 			}
 
-			Edit_SetText(hEditCLRData, (LPTSTR) EditBoxAnnotation.c_str());
+			Edit_SetText(m_hEditCLRData, (LPTSTR) EditBoxAnnotation.c_str());
 		}
 
 		break;
@@ -199,7 +206,7 @@ void PropertyPageHandler_CLR::tabsCLRData_OnTabChanged(HWND hControl, int Select
 			FillData(CLRDataItemsInfo, _T("Type"), DWORD_toString(pVTableFixups->Type), CorVTableFlags_toString(pVTableFixups->Type));
 
 			if (pVTableFixups->RVA == NULL)
-				Edit_SetText(hEditCLRData, NULL);
+				Edit_SetText(m_hEditCLRData, NULL);
 		}
 
 		break;
@@ -216,21 +223,21 @@ void PropertyPageHandler_CLR::tabsCLRData_OnTabChanged(HWND hControl, int Select
 		item.mask = LVIF_TEXT;
 		item.pszText = (LPTSTR) CLRDataItemsInfo[i].szText.c_str();
 
-		ListView_InsertItem(hListViewCLRData, &item);
+		ListView_InsertItem(m_hListViewCLRData, &item);
 
 		item.iSubItem = 1;
 		item.pszText = (LPTSTR) CLRDataItemsInfo[i].szData.c_str();
 
-		ListView_SetItem(hListViewCLRData, &item);
+		ListView_SetItem(m_hListViewCLRData, &item);
 
 		item.iSubItem = 2;
 		item.pszText = (LPTSTR) CLRDataItemsInfo[i].szComments.c_str();
 
-		ListView_SetItem(hListViewCLRData, &item);
+		ListView_SetItem(m_hListViewCLRData, &item);
 	}
 
 	// Resize columns for 'hListViewCLRData'
 	for (unsigned int i = 0; i < GetArraySize(GenericColumnText); i++)
-		ListView_SetColumnWidth(hListViewCLRData, i, 
+		ListView_SetColumnWidth(m_hListViewCLRData, i, 
 								i == GetArraySize(GenericColumnText) - 1 ? LVSCW_AUTOSIZE_USEHEADER : LVSCW_AUTOSIZE);
 }

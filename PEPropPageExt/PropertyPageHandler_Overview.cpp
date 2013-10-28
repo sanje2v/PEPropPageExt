@@ -12,19 +12,26 @@ static const unsigned long ALPHA_LEVEL = 0xC0000000L;	// 75% Opacity
 
 Gdiplus::Pen& RotatePenColor(Gdiplus::Pen& pen);
 
-void PropertyPageHandler_Overview::OnInitDialog()
+
+PropertyPageHandler_Overview::PropertyPageHandler_Overview(HWND hWnd, PEReadWrite& PEReaderWriter)
+		: PropertyPageHandler(hWnd, PEReaderWriter),
+			m_gdiplusToken(0), m_pbitmapMemoryMap(NULL),
+			m_HighestRVA(0), m_SelectionRectIndex(-1),
+			m_hTreeViewCustomItem(NULL)
 {
-	hTreeViewLegends = GetDlgItem(m_hWnd, IDC_TREELEGENDS);
-	hStaticCustom = GetDlgItem(m_hWnd, IDC_STATICCUSTOM);
-	hStaticCustomRVA = GetDlgItem(m_hWnd, IDC_STATICCUSTOMRVA);
-	hStaticCustomSize = GetDlgItem(m_hWnd, IDC_STATICCUSTOMSIZE);
-	hEditCustomRVA = GetDlgItem(m_hWnd, IDC_EDITCUSTOMRVA);
-	hEditCustomSize = GetDlgItem(m_hWnd, IDC_EDITCUSTOMSIZE);
+	m_hTreeViewLegends = GetDlgItem(m_hWnd, IDC_TREELEGENDS);
+	m_hStaticCustom = GetDlgItem(m_hWnd, IDC_STATICCUSTOM);
+	m_hStaticCustomRVA = GetDlgItem(m_hWnd, IDC_STATICCUSTOMRVA);
+	m_hStaticCustomSize = GetDlgItem(m_hWnd, IDC_STATICCUSTOMSIZE);
+	m_hEditCustomRVA = GetDlgItem(m_hWnd, IDC_EDITCUSTOMRVA);
+	m_hEditCustomSize = GetDlgItem(m_hWnd, IDC_EDITCUSTOMSIZE);
 
 	// Initialize GDI+
 	GdiplusStartupInput gdiplusStartupInput;
-	GdiplusStartup(&gdiplusToken, &gdiplusStartupInput, NULL);
+	GdiplusStartup(&m_gdiplusToken, &gdiplusStartupInput, NULL);
 }
+void PropertyPageHandler_Overview::OnInitDialog()
+{}
 
 void PropertyPageHandler_Overview::OnShowWindow()
 {
@@ -42,10 +49,10 @@ void PropertyPageHandler_Overview::OnShowWindow()
 	LEGENDS_WIDTH = rectClient.right - LEGENDS_X - MARGIN_X;
 	
 	unique_ptr<Graphics> pGraphicsWindow(Graphics::FromHWND(m_hWnd));
-	pbitmapMemoryMap = new Bitmap(rectClient.right - rectClient.left,
+	m_pbitmapMemoryMap = new Bitmap(rectClient.right - rectClient.left,
 									rectClient.bottom - rectClient.top,
 									pGraphicsWindow.get());
-	unique_ptr<Graphics> pGraphicsMemoryMap(Graphics::FromImage(pbitmapMemoryMap));
+	unique_ptr<Graphics> pGraphicsMemoryMap(Graphics::FromImage(m_pbitmapMemoryMap));
 	
 	Pen penCornflowerBlue(Color::CornflowerBlue);
 	Pen penAliceBlue(Color::AliceBlue);
@@ -63,13 +70,13 @@ void PropertyPageHandler_Overview::OnShowWindow()
 	{
 		DWORD CurrentHighestRVA = m_PEReaderWriter.GetSectionHeader(i)->VirtualAddress +
 									m_PEReaderWriter.GetSectionHeader(i)->Misc.VirtualSize;
-		if (HighestRVA < CurrentHighestRVA)
-			HighestRVA = CurrentHighestRVA;
+		if (m_HighestRVA < CurrentHighestRVA)
+			m_HighestRVA = CurrentHighestRVA;
 	}
 
 	// Flood fill everything to white
-	pGraphicsMemoryMap->Clear(Color::White);
 	pGraphicsMemoryMap->SetCompositingMode(CompositingModeSourceOver);
+	pGraphicsMemoryMap->Clear(Color::White);	
 	
 	// Draw Memory layout rectangle
 	pGraphicsMemoryMap->FillRectangle(penAliceBlue.GetBrush(), rectMemoryLayout);
@@ -83,7 +90,7 @@ void PropertyPageHandler_Overview::OnShowWindow()
 		{
 			PIMAGE_NT_HEADERS32 pNTHeader = m_PEReaderWriter.GetSecondaryHeader<PIMAGE_NT_HEADERS32>();
 			BaseAddress = DWORD_toString(pNTHeader->OptionalHeader.ImageBase, Hexadecimal);
-			LastAddress = DWORD_toString(pNTHeader->OptionalHeader.ImageBase + HighestRVA, Hexadecimal);
+			LastAddress = DWORD_toString(pNTHeader->OptionalHeader.ImageBase + m_HighestRVA, Hexadecimal);
 		}
 
 		break;
@@ -92,7 +99,7 @@ void PropertyPageHandler_Overview::OnShowWindow()
 		{
 			PIMAGE_NT_HEADERS64 pNTHeader = m_PEReaderWriter.GetSecondaryHeader<PIMAGE_NT_HEADERS64>();
 			BaseAddress = QWORD_toString(pNTHeader->OptionalHeader.ImageBase, Hexadecimal);
-			LastAddress = QWORD_toString(pNTHeader->OptionalHeader.ImageBase + HighestRVA, Hexadecimal);
+			LastAddress = QWORD_toString(pNTHeader->OptionalHeader.ImageBase + m_HighestRVA, Hexadecimal);
 		}
 	}
 
@@ -103,7 +110,11 @@ void PropertyPageHandler_Overview::OnShowWindow()
 	pGraphicsMemoryMap->DrawString(BaseAddress.c_str(), -1, &font, PointF((REAL) MARGIN_X, (REAL) rectMemoryLayout.Y), penBlack.GetBrush());
 	pGraphicsMemoryMap->DrawString(LastAddress.c_str(), -1, &font, PointF((REAL) MARGIN_X, (REAL) rectMemoryLayout.Y + rectMemoryLayout.Height - CAPTION_Y_DIFF / 2), penBlack.GetBrush());
 
-	static LPTSTR const GenericTreeviewItems[] = {_T("MS-DOS Header"), _T("PE Header"), _T("Sections"), _T("Data directories"), _T("Custom Address")};
+	static LPTSTR const GenericTreeviewItems[] = { _T("MS-DOS Header"),
+													_T("PE Header"),
+													_T("Sections"),
+													_T("Data directories"),
+													_T("Custom Address") };
 	TVINSERTSTRUCT Item;
 	ZeroMemory(&Item, sizeof(TVINSERTSTRUCT));
 	Item.hParent = TVI_ROOT;
@@ -111,57 +122,60 @@ void PropertyPageHandler_Overview::OnShowWindow()
 	Item.item.mask = TVIF_TEXT | LVIF_PARAM;
 
 	// Draw MSDOS header rectangle
-	FillData2(vectorSelectionRects, 0,
-									sizeof(IMAGE_DOS_HEADER),
-									BLOCK_X,
-									BLOCK_START_Y + 0,
-									BLOCK_WIDTH,
-									SCALE(sizeof(IMAGE_DOS_HEADER), HighestRVA, MEMORYLAYOUT_HEIGHT));
-	pGraphicsMemoryMap->FillRectangle(penCornflowerBlue.GetBrush(), vectorSelectionRects.back().R);
+	FillData2(m_vectorSelectionRects,
+				0,
+				sizeof(IMAGE_DOS_HEADER),
+				BLOCK_X,
+				BLOCK_START_Y + 0,
+				BLOCK_WIDTH,
+				SCALE(sizeof(IMAGE_DOS_HEADER), m_HighestRVA, MEMORYLAYOUT_HEIGHT));
+	pGraphicsMemoryMap->FillRectangle(penCornflowerBlue.GetBrush(), m_vectorSelectionRects.back().R);
 
 	Item.item.pszText = GenericTreeviewItems[0];
 	Item.item.cchTextMax = (int) _tcslen(GenericTreeviewItems[0]);
 	Item.item.lParam = 0;
-	TreeView_InsertItem(hTreeViewLegends, &Item);
+	TreeView_InsertItem(m_hTreeViewLegends, &Item);
 
 	// Draw PE header rectangle
 	int PEHeader_FileOffset = m_PEReaderWriter.GetPrimaryHeader<PIMAGE_DOS_HEADER>()->e_lfanew;
-	FillData2(vectorSelectionRects, PEHeader_FileOffset,
-									sizeof(IMAGE_NT_HEADERS),
-									BLOCK_X,
-									BLOCK_START_Y + SCALE(PEHeader_FileOffset, HighestRVA, MEMORYLAYOUT_HEIGHT),
-									BLOCK_WIDTH,
-									SCALE(sizeof(IMAGE_NT_HEADERS), HighestRVA, MEMORYLAYOUT_HEIGHT));
-	pGraphicsMemoryMap->FillRectangle(RotatePenColor(penBlockColor).GetBrush(), vectorSelectionRects.back().R);
+	FillData2(m_vectorSelectionRects,
+				PEHeader_FileOffset,
+				sizeof(IMAGE_NT_HEADERS),
+				BLOCK_X,
+				BLOCK_START_Y + SCALE(PEHeader_FileOffset, m_HighestRVA, MEMORYLAYOUT_HEIGHT),
+				BLOCK_WIDTH,
+				SCALE(sizeof(IMAGE_NT_HEADERS), m_HighestRVA, MEMORYLAYOUT_HEIGHT));
+	pGraphicsMemoryMap->FillRectangle(RotatePenColor(penBlockColor).GetBrush(), m_vectorSelectionRects.back().R);
 
 	Item.item.pszText = GenericTreeviewItems[1];
 	Item.item.cchTextMax = (int) _tcslen(GenericTreeviewItems[1]);
 	Item.item.lParam = 1;
-	TreeView_InsertItem(hTreeViewLegends, &Item);
+	TreeView_InsertItem(m_hTreeViewLegends, &Item);
 
 	// Draw Sections rectangle
 	Item.item.pszText = GenericTreeviewItems[2];
 	Item.item.cchTextMax = (int) _tcslen(GenericTreeviewItems[2]);
 	Item.item.lParam = -1;
-	Item.hParent = TreeView_InsertItem(hTreeViewLegends, &Item);
+	Item.hParent = TreeView_InsertItem(m_hTreeViewLegends, &Item);
 
 	for (int i = 0; i < m_PEReaderWriter.GetNoOfSections(); i++)
 	{
 		PIMAGE_SECTION_HEADER pSectionHeader = m_PEReaderWriter.GetSectionHeader(i);
-		FillData2(vectorSelectionRects, pSectionHeader->VirtualAddress,
-										pSectionHeader->Misc.VirtualSize,
-										BLOCK_X,
-										BLOCK_START_Y + SCALE(pSectionHeader->VirtualAddress, HighestRVA, MEMORYLAYOUT_HEIGHT),
-										BLOCK_WIDTH,
-										SCALE(pSectionHeader->Misc.VirtualSize, HighestRVA, MEMORYLAYOUT_HEIGHT));
+		FillData2(m_vectorSelectionRects,
+					pSectionHeader->VirtualAddress,
+					pSectionHeader->Misc.VirtualSize,
+					BLOCK_X,
+					BLOCK_START_Y + SCALE(pSectionHeader->VirtualAddress, m_HighestRVA, MEMORYLAYOUT_HEIGHT),
+					BLOCK_WIDTH,
+					SCALE(pSectionHeader->Misc.VirtualSize, m_HighestRVA, MEMORYLAYOUT_HEIGHT));
 
-		pGraphicsMemoryMap->FillRectangle(RotatePenColor(penBlockColor).GetBrush(), vectorSelectionRects.back().R);
+		pGraphicsMemoryMap->FillRectangle(RotatePenColor(penBlockColor).GetBrush(), m_vectorSelectionRects.back().R);
 
 		tstring buffer = DWORD_toString(i + 1) + _T(": \"") + ProperSectionName(pSectionHeader->Name) + _T("\"");
 		Item.item.pszText = (LPTSTR) buffer.c_str();
 		Item.item.cchTextMax = (int) buffer.size();
 		Item.item.lParam = i + 2;
-		TreeView_InsertItem(hTreeViewLegends, &Item);
+		TreeView_InsertItem(m_hTreeViewLegends, &Item);
 	}
 
 	// Draw Data directories
@@ -169,7 +183,7 @@ void PropertyPageHandler_Overview::OnShowWindow()
 	Item.item.pszText = GenericTreeviewItems[3];
 	Item.item.cchTextMax = (int) _tcslen(GenericTreeviewItems[3]);
 	Item.item.lParam = -1;
-	Item.hParent = TreeView_InsertItem(hTreeViewLegends, &Item);
+	Item.hParent = TreeView_InsertItem(m_hTreeViewLegends, &Item);
 
 	LPTSTR DataDirectories[] = { _T("Export Table"), _T("Import Table"), _T("Resource Table"),
 									_T("Exception Table"), _T("Certificate Data"), _T("Base Reloc Table"), _T("Debug Data"),
@@ -185,47 +199,50 @@ void PropertyPageHandler_Overview::OnShowWindow()
 
 		if (pDataDir->Size == 0) continue;	// Ignore empty data directory references
 
-		FillData2(vectorSelectionRects, pDataDir->VirtualAddress,
-										pDataDir->Size,
-										BLOCK_X,
-										BLOCK_START_Y + SCALE(pDataDir->VirtualAddress, HighestRVA, MEMORYLAYOUT_HEIGHT),
-										BLOCK_WIDTH,
-										SCALE(pDataDir->Size, HighestRVA, MEMORYLAYOUT_HEIGHT));
+		FillData2(m_vectorSelectionRects,
+					pDataDir->VirtualAddress,
+					pDataDir->Size,
+					BLOCK_X,
+					BLOCK_START_Y + SCALE(pDataDir->VirtualAddress, m_HighestRVA, MEMORYLAYOUT_HEIGHT),
+					BLOCK_WIDTH,
+					SCALE(pDataDir->Size, m_HighestRVA, MEMORYLAYOUT_HEIGHT));
+
+		pGraphicsMemoryMap->FillRectangle(RotatePenColor(penBlockColor).GetBrush(), m_vectorSelectionRects.back().R);
 
 		Item.item.pszText = DataDirectories[i];
 		Item.item.cchTextMax = (int) _tcslen(DataDirectories[i]);
-		Item.item.lParam = (int) vectorSelectionRects.size() - 1;
-		TreeView_InsertItem(hTreeViewLegends, &Item);
+		Item.item.lParam = (int) m_vectorSelectionRects.size() - 1;
+		TreeView_InsertItem(m_hTreeViewLegends, &Item);
 	}
 
 	// Draw Custom
-	FillData2(vectorSelectionRects, 0, 0, 0, 0, 0, 0);
+	FillData2(m_vectorSelectionRects, 0, 0, 0, 0, 0, 0);
 
 	Item.hParent = TVI_ROOT;
 	Item.item.pszText = GenericTreeviewItems[4];
 	Item.item.cchTextMax = (int) _tcslen(GenericTreeviewItems[4]);
-	Item.item.lParam = (int) vectorSelectionRects.size() - 1;
-	hTreeViewCustomItem = TreeView_InsertItem(hTreeViewLegends, &Item);
+	Item.item.lParam = (int) m_vectorSelectionRects.size() - 1;
+	m_hTreeViewCustomItem = TreeView_InsertItem(m_hTreeViewLegends, &Item);
 
 	// Handle Legends tree view
 	// Move control into position
-	MoveWindow(hTreeViewLegends, LEGENDS_X, LEGENDS_Y, LEGENDS_WIDTH, LEGENDS_HEIGHT, TRUE);
+	MoveWindow(m_hTreeViewLegends, LEGENDS_X, LEGENDS_Y, LEGENDS_WIDTH, LEGENDS_HEIGHT, TRUE);
 
 	// Handle Custom static and text boxes
 	RECT rectStaticCustom, rectEditCustom;
 
-	GetWindowRect(hStaticCustom, &rectStaticCustom);
-	GetWindowRect(hEditCustomRVA, &rectEditCustom);
+	GetWindowRect(m_hStaticCustom, &rectStaticCustom);
+	GetWindowRect(m_hEditCustomRVA, &rectEditCustom);
 
-	SetWindowPos(hStaticCustom, HWND_TOP, CUSTOM_X, CUSTOM_Y, -1, -1, SWP_NOSIZE | SWP_NOZORDER | SWP_SHOWWINDOW);
-	SetWindowPos(hStaticCustomRVA, HWND_TOP, CUSTOM_X, CUSTOM_Y + rectStaticCustom.bottom - rectStaticCustom.top + (rectEditCustom.bottom - rectEditCustom.top) / 2, -1, -1, SWP_NOSIZE | SWP_NOZORDER | SWP_SHOWWINDOW);
-	SetWindowPos(hStaticCustomSize, HWND_TOP, CUSTOM_X, CUSTOM_Y + (rectStaticCustom.bottom - rectStaticCustom.top) * 2 + (rectEditCustom.bottom - rectEditCustom.top) + 2, -1, -1, SWP_NOSIZE | SWP_NOZORDER | SWP_SHOWWINDOW);
-	MoveWindow(hEditCustomRVA, CUSTOM_X + 30, CUSTOM_Y + (rectStaticCustom.bottom - rectStaticCustom.top) * 3 / 2, rectClient.right - CUSTOM_X - 30 - MARGIN_X, rectEditCustom.bottom - rectEditCustom.top, FALSE);
-	MoveWindow(hEditCustomSize, CUSTOM_X + 30, CUSTOM_Y + (rectStaticCustom.bottom - rectStaticCustom.top) * 3 + 6, rectClient.right - CUSTOM_X - 30 - MARGIN_X, rectEditCustom.bottom - rectEditCustom.top, FALSE);
+	SetWindowPos(m_hStaticCustom, HWND_TOP, CUSTOM_X, CUSTOM_Y, -1, -1, SWP_NOSIZE | SWP_NOZORDER | SWP_SHOWWINDOW);
+	SetWindowPos(m_hStaticCustomRVA, HWND_TOP, CUSTOM_X, CUSTOM_Y + rectStaticCustom.bottom - rectStaticCustom.top + (rectEditCustom.bottom - rectEditCustom.top) / 2, -1, -1, SWP_NOSIZE | SWP_NOZORDER | SWP_SHOWWINDOW);
+	SetWindowPos(m_hStaticCustomSize, HWND_TOP, CUSTOM_X, CUSTOM_Y + (rectStaticCustom.bottom - rectStaticCustom.top) * 2 + (rectEditCustom.bottom - rectEditCustom.top) + 2, -1, -1, SWP_NOSIZE | SWP_NOZORDER | SWP_SHOWWINDOW);
+	MoveWindow(m_hEditCustomRVA, CUSTOM_X + 30, CUSTOM_Y + (rectStaticCustom.bottom - rectStaticCustom.top) * 3 / 2, rectClient.right - CUSTOM_X - 30 - MARGIN_X, rectEditCustom.bottom - rectEditCustom.top, FALSE);
+	MoveWindow(m_hEditCustomSize, CUSTOM_X + 30, CUSTOM_Y + (rectStaticCustom.bottom - rectStaticCustom.top) * 3 + 6, rectClient.right - CUSTOM_X - 30 - MARGIN_X, rectEditCustom.bottom - rectEditCustom.top, FALSE);
 
 	// Set default text
-	SetWindowText(hEditCustomRVA, _T("0x0"));
-	SetWindowText(hEditCustomSize, _T("0"));
+	SetWindowText(m_hEditCustomRVA, _T("0x0"));
+	SetWindowText(m_hEditCustomSize, _T("0"));
 
 	bExecutedOnce = true;
 }
@@ -239,9 +256,9 @@ void PropertyPageHandler_Overview::OnPaint(HDC hdc, const RECT& rectUpdate)
 
 	Pen pen(Color::Black, 2.0f);
 
-	g.DrawImage(pbitmapMemoryMap, 0, 0);			// Draw memory map
+	g.DrawImage(m_pbitmapMemoryMap, 0, 0);			// Draw memory map
 
-	if (SelectionRectIndex >= 0)
+	if (m_SelectionRectIndex >= 0)
 	{
 		FontFamily fontFamily(L"MS Shell Dlg");
 		Font font(&fontFamily, 11.0f, FontStyleRegular, UnitPixel);
@@ -251,10 +268,10 @@ void PropertyPageHandler_Overview::OnPaint(HDC hdc, const RECT& rectUpdate)
 		rectClient.X = rectClient.Y = 0.0f;
 		rectClient.Width = rectClient.Height = 100.0f;
 		RectF rectBoundingBox;
-		int EndAddress_Y = vectorSelectionRects[SelectionRectIndex].R.Y;
+		int EndAddress_Y = m_vectorSelectionRects[m_SelectionRectIndex].R.Y;
 
 		// Draw selection rectangle
-		g.DrawRectangle(&pen, vectorSelectionRects[SelectionRectIndex].R);
+		g.DrawRectangle(&pen, m_vectorSelectionRects[m_SelectionRectIndex].R);
 		
 		// Draw start/end virtual address
 		switch (m_PEReaderWriter.GetPEType())
@@ -262,15 +279,15 @@ void PropertyPageHandler_Overview::OnPaint(HDC hdc, const RECT& rectUpdate)
 		case PEReadWrite::PE32:
 			{
 				PIMAGE_NT_HEADERS32 pPEHeader = m_PEReaderWriter.GetSecondaryHeader<PIMAGE_NT_HEADERS32>();
-				StartAddress = DWORD_toString(pPEHeader->OptionalHeader.ImageBase + vectorSelectionRects[SelectionRectIndex].RVA, Hexadecimal);
+				StartAddress = DWORD_toString(pPEHeader->OptionalHeader.ImageBase + m_vectorSelectionRects[m_SelectionRectIndex].RVA, Hexadecimal);
 				
 				g.MeasureString(StartAddress.c_str(), -1, &font, rectClient, &rectBoundingBox);
 				g.DrawString(StartAddress.c_str(),
-								-1, &font, PointF((REAL) SELECTION_RECT_ADDR_X, (REAL) vectorSelectionRects[SelectionRectIndex].R.Y - rectBoundingBox.Height / 2), penBlack.GetBrush());
+								-1, &font, PointF((REAL) SELECTION_RECT_ADDR_X, (REAL) m_vectorSelectionRects[m_SelectionRectIndex].R.Y - rectBoundingBox.Height / 2), penBlack.GetBrush());
 
-				EndAddress_Y += (int) (rectBoundingBox.Height > vectorSelectionRects[SelectionRectIndex].R.Height ? rectBoundingBox.Height : vectorSelectionRects[SelectionRectIndex].R.Height);
+				EndAddress_Y += (int) (rectBoundingBox.Height > m_vectorSelectionRects[m_SelectionRectIndex].R.Height ? rectBoundingBox.Height : m_vectorSelectionRects[m_SelectionRectIndex].R.Height);
 
-				EndAddress = DWORD_toString(pPEHeader->OptionalHeader.ImageBase + vectorSelectionRects[SelectionRectIndex].RVA + vectorSelectionRects[SelectionRectIndex].Size, Hexadecimal);
+				EndAddress = DWORD_toString(pPEHeader->OptionalHeader.ImageBase + m_vectorSelectionRects[m_SelectionRectIndex].RVA + m_vectorSelectionRects[m_SelectionRectIndex].Size, Hexadecimal);
 				g.DrawString(EndAddress.c_str(), -1, &font, PointF((REAL) SELECTION_RECT_ADDR_X, (REAL) EndAddress_Y - rectBoundingBox.Height / 2), penBlack.GetBrush());
 			}
 
@@ -279,15 +296,15 @@ void PropertyPageHandler_Overview::OnPaint(HDC hdc, const RECT& rectUpdate)
 		case PEReadWrite::PE64:
 			{
 				PIMAGE_NT_HEADERS64 pPEHeader = m_PEReaderWriter.GetSecondaryHeader<PIMAGE_NT_HEADERS64>();
-				StartAddress = QWORD_toString(pPEHeader->OptionalHeader.ImageBase + vectorSelectionRects[SelectionRectIndex].RVA, Hexadecimal);
+				StartAddress = QWORD_toString(pPEHeader->OptionalHeader.ImageBase + m_vectorSelectionRects[m_SelectionRectIndex].RVA, Hexadecimal);
 				
 				g.MeasureString(StartAddress.c_str(), -1, &font, rectClient, &rectBoundingBox);
-				g.DrawString(QWORD_toString(pPEHeader->OptionalHeader.ImageBase + vectorSelectionRects[SelectionRectIndex].RVA, Hexadecimal).c_str(),
-								-1, &font, PointF((REAL) SELECTION_RECT_ADDR_X, (REAL) vectorSelectionRects[SelectionRectIndex].R.Y - rectBoundingBox.Height / 2), penBlack.GetBrush());
+				g.DrawString(QWORD_toString(pPEHeader->OptionalHeader.ImageBase + m_vectorSelectionRects[m_SelectionRectIndex].RVA, Hexadecimal).c_str(),
+								-1, &font, PointF((REAL) SELECTION_RECT_ADDR_X, (REAL) m_vectorSelectionRects[m_SelectionRectIndex].R.Y - rectBoundingBox.Height / 2), penBlack.GetBrush());
 				
-				EndAddress_Y += (int) (rectBoundingBox.Height > vectorSelectionRects[SelectionRectIndex].R.Height ? rectBoundingBox.Height : vectorSelectionRects[SelectionRectIndex].R.Height);
+				EndAddress_Y += (int) (rectBoundingBox.Height > m_vectorSelectionRects[m_SelectionRectIndex].R.Height ? rectBoundingBox.Height : m_vectorSelectionRects[m_SelectionRectIndex].R.Height);
 
-				EndAddress = QWORD_toString(pPEHeader->OptionalHeader.ImageBase + vectorSelectionRects[SelectionRectIndex].RVA + vectorSelectionRects[SelectionRectIndex].Size, Hexadecimal);
+				EndAddress = QWORD_toString(pPEHeader->OptionalHeader.ImageBase + m_vectorSelectionRects[m_SelectionRectIndex].RVA + m_vectorSelectionRects[m_SelectionRectIndex].Size, Hexadecimal);
 				g.DrawString(EndAddress.c_str(), -1, &font, PointF((REAL) SELECTION_RECT_ADDR_X, (REAL) EndAddress_Y - rectBoundingBox.Height / 2), penBlack.GetBrush());
 			}
 		}
@@ -296,14 +313,14 @@ void PropertyPageHandler_Overview::OnPaint(HDC hdc, const RECT& rectUpdate)
 
 void PropertyPageHandler_Overview::tvwLegends_OnSelection(HWND hControl, NMTVITEMCHANGE *pItemChange)
 {
-	SelectionRectIndex = (int) pItemChange->lParam;
+	m_SelectionRectIndex = (int) pItemChange->lParam;
 
-	if (pItemChange->hItem == hTreeViewCustomItem)
+	if (pItemChange->hItem == m_hTreeViewCustomItem)
 	{
 		// Set RVA, size data and compute rectangle
 		TCHAR szBuffer[64];
 
-		Edit_GetText(hEditCustomRVA, szBuffer, GetArraySize(szBuffer));
+		Edit_GetText(m_hEditCustomRVA, szBuffer, GetArraySize(szBuffer));
 		
 		tstringstream ss;
 		DWORD CustomRVA = 0, CustomSize = 0;
@@ -314,18 +331,18 @@ void PropertyPageHandler_Overview::tvwLegends_OnSelection(HWND hControl, NMTVITE
 		ss >> CustomRVA;
 
 		ss.clear();
-		Edit_GetText(hEditCustomSize, szBuffer, GetArraySize(szBuffer));
+		Edit_GetText(m_hEditCustomSize, szBuffer, GetArraySize(szBuffer));
 		ss << dec << szBuffer;
 		if (ss.fail())
 			return;
 		ss >> CustomSize;
 
-		vectorSelectionRects[SelectionRectIndex].RVA = CustomRVA;
-		vectorSelectionRects[SelectionRectIndex].Size = CustomSize;
-		vectorSelectionRects[SelectionRectIndex].R = Rect(BLOCK_X,
-															BLOCK_START_Y + SCALE(CustomRVA, HighestRVA, MEMORYLAYOUT_HEIGHT),
-															BLOCK_WIDTH,
-															SCALE(CustomSize, HighestRVA, MEMORYLAYOUT_HEIGHT));
+		m_vectorSelectionRects[m_SelectionRectIndex].RVA = CustomRVA;
+		m_vectorSelectionRects[m_SelectionRectIndex].Size = CustomSize;
+		m_vectorSelectionRects[m_SelectionRectIndex].R = Rect(BLOCK_X,
+																BLOCK_START_Y + SCALE(CustomRVA, m_HighestRVA, MEMORYLAYOUT_HEIGHT),
+																BLOCK_WIDTH,
+																SCALE(CustomSize, m_HighestRVA, MEMORYLAYOUT_HEIGHT));
 	}
 
 	InvalidateRect(m_hWnd, NULL, TRUE);
@@ -333,22 +350,22 @@ void PropertyPageHandler_Overview::tvwLegends_OnSelection(HWND hControl, NMTVITE
 
 void PropertyPageHandler_Overview::txtCustomRVA_OnLostFocus(HWND hControl)
 {
-	if (GetFocus() == hTreeViewLegends)
+	if (GetFocus() == m_hTreeViewLegends)
 	{
 		TVITEM Item;
 		ZeroMemory(&Item, sizeof(Item));
 		Item.mask = TVIF_HANDLE | TVIF_STATE;
-		Item.hItem = hTreeViewCustomItem;
+		Item.hItem = m_hTreeViewCustomItem;
 		Item.stateMask = TVIS_SELECTED;
 
-		TreeView_GetItem(hTreeViewLegends, &Item);
+		TreeView_GetItem(m_hTreeViewLegends, &Item);
 
 		if (TestFlag(Item.state, TVIS_SELECTED))
 		{
 			// Set RVA, size data and compute rectangle
 			TCHAR szBuffer[64];
 
-			Edit_GetText(hEditCustomRVA, szBuffer, GetArraySize(szBuffer));
+			Edit_GetText(m_hEditCustomRVA, szBuffer, GetArraySize(szBuffer));
 		
 			tstringstream ss;
 			DWORD CustomRVA = 0, CustomSize = 0;
@@ -359,18 +376,18 @@ void PropertyPageHandler_Overview::txtCustomRVA_OnLostFocus(HWND hControl)
 			ss >> CustomRVA;
 
 			ss.clear();
-			Edit_GetText(hEditCustomSize, szBuffer, GetArraySize(szBuffer));
+			Edit_GetText(m_hEditCustomSize, szBuffer, GetArraySize(szBuffer));
 			ss << dec << szBuffer;
 			if (ss.fail())
 				return;
 			ss >> CustomSize;
 
-			vectorSelectionRects[SelectionRectIndex].RVA = CustomRVA;
-			vectorSelectionRects[SelectionRectIndex].Size = CustomSize;
-			vectorSelectionRects[SelectionRectIndex].R = Rect(BLOCK_X,
-																BLOCK_START_Y + SCALE(CustomRVA, HighestRVA, MEMORYLAYOUT_HEIGHT),
-																BLOCK_WIDTH,
-																SCALE(CustomSize, HighestRVA, MEMORYLAYOUT_HEIGHT));
+			m_vectorSelectionRects[m_SelectionRectIndex].RVA = CustomRVA;
+			m_vectorSelectionRects[m_SelectionRectIndex].Size = CustomSize;
+			m_vectorSelectionRects[m_SelectionRectIndex].R = Rect(BLOCK_X,
+																	BLOCK_START_Y + SCALE(CustomRVA, m_HighestRVA, MEMORYLAYOUT_HEIGHT),
+																	BLOCK_WIDTH,
+																	SCALE(CustomSize, m_HighestRVA, MEMORYLAYOUT_HEIGHT));
 
 			InvalidateRect(m_hWnd, NULL, TRUE);
 		}
@@ -379,22 +396,22 @@ void PropertyPageHandler_Overview::txtCustomRVA_OnLostFocus(HWND hControl)
 
 void PropertyPageHandler_Overview::txtCustomSize_OnLostFocus(HWND hControl)
 {
-	if (GetFocus() == hTreeViewLegends)
+	if (GetFocus() == m_hTreeViewLegends)
 	{
 		TVITEM Item;
 		ZeroMemory(&Item, sizeof(Item));
 		Item.mask = TVIF_HANDLE | TVIF_STATE;
-		Item.hItem = hTreeViewCustomItem;
+		Item.hItem = m_hTreeViewCustomItem;
 		Item.stateMask = TVIS_SELECTED;
 
-		TreeView_GetItem(hTreeViewLegends, &Item);
+		TreeView_GetItem(m_hTreeViewLegends, &Item);
 
 		if (TestFlag(Item.state, TVIS_SELECTED))
 		{
 			// Set RVA, size data and compute rectangle
 			TCHAR szBuffer[64];
 
-			Edit_GetText(hEditCustomRVA, szBuffer, GetArraySize(szBuffer));
+			Edit_GetText(m_hEditCustomRVA, szBuffer, GetArraySize(szBuffer));
 		
 			tstringstream ss;
 			DWORD CustomRVA = 0, CustomSize = 0;
@@ -405,18 +422,18 @@ void PropertyPageHandler_Overview::txtCustomSize_OnLostFocus(HWND hControl)
 			ss >> CustomRVA;
 
 			ss.clear();
-			Edit_GetText(hEditCustomSize, szBuffer, GetArraySize(szBuffer));
+			Edit_GetText(m_hEditCustomSize, szBuffer, GetArraySize(szBuffer));
 			ss << dec << szBuffer;
 			if (ss.fail())
 				return;
 			ss >> CustomSize;
 
-			vectorSelectionRects[SelectionRectIndex].RVA = CustomRVA;
-			vectorSelectionRects[SelectionRectIndex].Size = CustomSize;
-			vectorSelectionRects[SelectionRectIndex].R = Rect(BLOCK_X,
-																BLOCK_START_Y + SCALE(CustomRVA, HighestRVA, MEMORYLAYOUT_HEIGHT),
-																BLOCK_WIDTH,
-																SCALE(CustomSize, HighestRVA, MEMORYLAYOUT_HEIGHT));
+			m_vectorSelectionRects[m_SelectionRectIndex].RVA = CustomRVA;
+			m_vectorSelectionRects[m_SelectionRectIndex].Size = CustomSize;
+			m_vectorSelectionRects[m_SelectionRectIndex].R = Rect(BLOCK_X,
+																	BLOCK_START_Y + SCALE(CustomRVA, m_HighestRVA, MEMORYLAYOUT_HEIGHT),
+																	BLOCK_WIDTH,
+																	SCALE(CustomSize, m_HighestRVA, MEMORYLAYOUT_HEIGHT));
 
 			InvalidateRect(m_hWnd, NULL, TRUE);
 		}
@@ -425,9 +442,9 @@ void PropertyPageHandler_Overview::txtCustomSize_OnLostFocus(HWND hControl)
 
 void PropertyPageHandler_Overview::OnDestroy()
 {
-	SAFE_RELEASE(pbitmapMemoryMap);
+	SAFE_RELEASE(m_pbitmapMemoryMap);
 
-	GdiplusShutdown(gdiplusToken);
+	GdiplusShutdown(m_gdiplusToken);
 }
 
 Gdiplus::Pen& RotatePenColor(Gdiplus::Pen& pen)

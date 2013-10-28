@@ -4,9 +4,10 @@
 #define FillData2(stringobj, label, value)	(stringobj).append(label _T("\t") + tstring(value) + _T('\n'))
 
 
-void PropertyPageHandler_ExceptionHandling::OnInitDialog()
+PropertyPageHandler_ExceptionHandling::PropertyPageHandler_ExceptionHandling(HWND hWnd, PEReadWrite& PEReaderWriter)
+		: PropertyPageHandler(hWnd, PEReaderWriter)
 {
-	hEditExceptions = GetDlgItem(m_hWnd, IDC_EDITEXCEPTIONS);
+	m_hEditExceptions = GetDlgItem(m_hWnd, IDC_EDITEXCEPTIONS);
 
 	// Setup controls with layout manager
 	m_pLayoutManager->AddChildConstraint(IDC_EDITEXCEPTIONS, CWA_LEFTRIGHT, CWA_TOPBOTTOM);
@@ -19,16 +20,20 @@ void PropertyPageHandler_ExceptionHandling::OnInitDialog()
 	CharFormat.cbSize = sizeof(CHARFORMAT);
 	CharFormat.dwMask = CFM_FACE;
 	CopyMemory(CharFormat.szFaceName, szPreferredFont, _tcslen(szPreferredFont) + sizeof(TCHAR));
-	SendMessage(hEditExceptions, EM_SETCHARFORMAT, SCF_DEFAULT, (LPARAM) &CharFormat);
+	SendMessage(m_hEditExceptions, EM_SETCHARFORMAT, SCF_DEFAULT, (LPARAM) &CharFormat);
 
 	// Set tab stop  for rich edit
 	DWORD cTabs = 100;
-	Edit_SetTabStops(hEditExceptions, 1, &cTabs);
+	Edit_SetTabStops(m_hEditExceptions, 1, &cTabs);
+}
 
+void PropertyPageHandler_ExceptionHandling::OnInitDialog()
+{
 	// Fill controls with data
 	vector<TextAndData> ExceptionItemsInfo;
 	PIMAGE_NT_HEADERS pNTheaders = m_PEReaderWriter.GetSecondaryHeader<PIMAGE_NT_HEADERS>();
-	tstring buffer = _T("Name\tAddress\n-----------------------------------------------------\n");
+	tstring buffer = _T("Name\tAddress\n")
+						_T("-----------------------------------------------------\n");
 
 	switch (pNTheaders->FileHeader.Machine)
 	{
@@ -108,9 +113,9 @@ void PropertyPageHandler_ExceptionHandling::OnInitDialog()
 	// Remove the two trailing newline characters
 	buffer.resize(buffer.size() - 2);
 
-	Edit_SetText(hEditExceptions, (LPTSTR) buffer.c_str());
+	Edit_SetText(m_hEditExceptions, (LPTSTR) buffer.c_str());
 	// NOTE: Cannot use macros in the following because they use 'SendMessage' which didn't work.
 	//	Apparently, using the 'Edit_GetLineCount' macro is just fine.
-	PostMessage(hEditExceptions, EM_SETSEL, -1, 0);
-	PostMessage(hEditExceptions, EM_LINESCROLL, 0, -Edit_GetLineCount(hEditExceptions));
+	PostMessage(m_hEditExceptions, EM_SETSEL, -1, 0);
+	PostMessage(m_hEditExceptions, EM_LINESCROLL, 0, -Edit_GetLineCount(m_hEditExceptions));
 }

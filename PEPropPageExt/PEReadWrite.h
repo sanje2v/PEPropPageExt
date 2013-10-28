@@ -114,6 +114,7 @@ public:
 	bool Open(wstring filename);	// Opens and maps file
 	void Close();					// Unmaps and closes file
 
+	bool IsMemoryReadable(void *ptr, DWORD size);
 	void *FileOffsetToMemAddress(DWORD offset);
 	void *GetVA(DWORD rva, bool isalwaysfileoffset = false);		// Get Virtual Address from RVA
 	LARGE_INTEGER GetFileSize();

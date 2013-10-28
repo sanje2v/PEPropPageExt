@@ -5,26 +5,30 @@
 #define FillData2(stringobj, label, value)	(stringobj).append(label _T(": ") + tstring(value) + _T('\n'))
 
 
-void PropertyPageHandler_Debug::OnInitDialog()
+PropertyPageHandler_Debug::PropertyPageHandler_Debug(HWND hWnd, PEReadWrite& PEReaderWriter)
+	: PropertyPageHandler(hWnd, PEReaderWriter)
 {
-	hTabsDebugDirs = GetDlgItem(m_hWnd, IDC_TABSDEBUGDIRS);
-	hListViewDebugDir = GetDlgItem(m_hWnd, IDC_LISTDEBUGDIR);
-	hEditDebugData = GetDlgItem(m_hWnd, IDC_EDITDEBUGDATA);
+	m_hTabsDebugDirs = GetDlgItem(m_hWnd, IDC_TABSDEBUGDIRS);
+	m_hListViewDebugDir = GetDlgItem(m_hWnd, IDC_LISTDEBUGDIR);
+	m_hEditDebugData = GetDlgItem(m_hWnd, IDC_EDITDEBUGDATA);
 
 	// Get tooltip data
-	RTTI::GetTooltipInfo(DebugDirTooltipInfo, 0, RTTI::RTTI_DEBUG_DIRECTORY);
+	RTTI::GetTooltipInfo(m_DebugDirTooltipInfo, 0, RTTI::RTTI_DEBUG_DIRECTORY);
 
 	// Setup controls
 	m_pLayoutManager->AddChildConstraint(IDC_TABSDEBUGDIRS, CWA_LEFTRIGHT, CWA_TOPBOTTOM);
 	m_pLayoutManager->AddChildConstraint(IDC_LISTDEBUGDIR, CWA_LEFTRIGHT, CWA_TOP);
 	m_pLayoutManager->AddChildConstraint(IDC_EDITDEBUGDATA, CWA_LEFTRIGHT, CWA_TOPBOTTOM);
-	SetWindowPos(hTabsDebugDirs, hListViewDebugDir, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE);
-	SetWindowPos(hTabsDebugDirs, hEditDebugData, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE);
+	SetWindowPos(m_hTabsDebugDirs, m_hListViewDebugDir, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE);
+	SetWindowPos(m_hTabsDebugDirs, m_hEditDebugData, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE);
 	// Set full row selection style for list view
-	ListView_SetExtendedListViewStyleEx(hListViewDebugDir,
+	ListView_SetExtendedListViewStyleEx(m_hListViewDebugDir,
 										LVS_EX_FULLROWSELECT | LVS_EX_INFOTIP | LVS_EX_LABELTIP,
 										LVS_EX_FULLROWSELECT | LVS_EX_INFOTIP | LVS_EX_LABELTIP);
+}
 
+void PropertyPageHandler_Debug::OnInitDialog()
+{
 	// Insert Tabs
 	TCITEM item;
 	for (int i = 0; i < m_PEReaderWriter.GetNoOfDebugDirs(); i++)
@@ -33,7 +37,7 @@ void PropertyPageHandler_Debug::OnInitDialog()
 		item.mask = TCIF_TEXT;
 		item.pszText = (LPTSTR) temp.c_str();
 
-		TabCtrl_InsertItem(hTabsDebugDirs, i, &item);
+		TabCtrl_InsertItem(m_hTabsDebugDirs, i, &item);
 	}
 
 	// Insert ListView columns
@@ -44,40 +48,40 @@ void PropertyPageHandler_Debug::OnInitDialog()
 	{
 		column.mask = LVCF_TEXT;
 		column.pszText = GenericColumnText[i];
-		ListView_InsertColumn(hListViewDebugDir, i, &column);
+		ListView_InsertColumn(m_hListViewDebugDir, i, &column);
 	}
 
-	tabsDebugDirs_OnTabChanged(hTabsDebugDirs, 0);
+	tabsDebugDirs_OnTabChanged(m_hTabsDebugDirs, 0);
 }
 
 tstring PropertyPageHandler_Debug::lstDebugDir_OnGetTooltip(int Index)
 {
-	return Generic_OnGetTooltip(DebugDirTooltipInfo, Index);
+	return Generic_OnGetTooltip(m_DebugDirTooltipInfo, Index);
 }
 
 void PropertyPageHandler_Debug::lstDebugDir_OnContextMenu(LONG x, LONG y, int Index)
 {
-	Generic_OnContextMenu(DebugDirTooltipInfo, DebugDirInfo, x, y, Index);
+	Generic_OnContextMenu(m_DebugDirTooltipInfo, m_DebugDirInfo, x, y, Index);
 }
 
 void PropertyPageHandler_Debug::tabsDebugDirs_OnTabChanged(HWND hControl, int SelectedIndex)
 {
 	// Delete all items in ListViewImportsFuncsAndDirTable
-	ListView_DeleteAllItems(hListViewDebugDir);
+	ListView_DeleteAllItems(m_hListViewDebugDir);
 
 	// Fill control with data
-	DebugDirInfo.clear();
+	m_DebugDirInfo.clear();
 
 	IMAGE_DEBUG_DIRECTORY& DebugDir = *m_PEReaderWriter.GetDebugDirectory(SelectedIndex);
 
-	FillData(DebugDirInfo, _T("Characteristics"), DWORD_toString(DebugDir.Characteristics), _T("Reserved, must be zero"));
-	FillData(DebugDirInfo, _T("Time Date Stamp"), DWORD_toString(DebugDir.TimeDateStamp), TimeDateStamp_toString(DebugDir.TimeDateStamp));
-	FillData(DebugDirInfo, _T("Version"), VersionNums_toString(DebugDir.MajorVersion, DebugDir.MinorVersion));
-	FillData(DebugDirInfo, _T("Type"), DWORD_toString(DebugDir.Type, Hexadecimal), DebugType_toString(DebugDir.Type));
-	FillData(DebugDirInfo, _T("Debug Data Size"), DWORD_toString(DebugDir.SizeOfData), FormattedBytesSize(DebugDir.SizeOfData));
-	FillData(DebugDirInfo, _T("Raw Data Address (RVA)"), DWORD_toString(DebugDir.AddressOfRawData, Hexadecimal),
-		DebugDir.Type == IMAGE_DEBUG_TYPE_MISC ? MultiByte_toString((char *) m_PEReaderWriter.GetVA(DebugDir.AddressOfRawData)) : _T(""));
-	FillData(DebugDirInfo, _T("Raw Data Offset"), DWORD_toString(DebugDir.PointerToRawData, Hexadecimal));
+	FillData(m_DebugDirInfo, _T("Characteristics"), DWORD_toString(DebugDir.Characteristics), _T("Reserved, must be zero"));
+	FillData(m_DebugDirInfo, _T("Time Date Stamp"), DWORD_toString(DebugDir.TimeDateStamp), TimeDateStamp_toString(DebugDir.TimeDateStamp));
+	FillData(m_DebugDirInfo, _T("Version"), VersionNums_toString(DebugDir.MajorVersion, DebugDir.MinorVersion));
+	FillData(m_DebugDirInfo, _T("Type"), DWORD_toString(DebugDir.Type, Hexadecimal), DebugType_toString(DebugDir.Type));
+	FillData(m_DebugDirInfo, _T("Debug Data Size"), DWORD_toString(DebugDir.SizeOfData), FormattedBytesSize(DebugDir.SizeOfData));
+	FillData(m_DebugDirInfo, _T("Raw Data Address (RVA)"), DWORD_toString(DebugDir.AddressOfRawData, Hexadecimal),
+				DebugDir.Type == IMAGE_DEBUG_TYPE_MISC ? MultiByte_toString((char *) m_PEReaderWriter.GetVA(DebugDir.AddressOfRawData)) : _T(""));
+	FillData(m_DebugDirInfo, _T("Raw Data Offset"), DWORD_toString(DebugDir.PointerToRawData, Hexadecimal));
 
 	tstring buffer;
 	void *pDebugData = DebugDir.AddressOfRawData != 0 ? m_PEReaderWriter.GetVA(DebugDir.AddressOfRawData) :
@@ -193,31 +197,31 @@ void PropertyPageHandler_Debug::tabsDebugDirs_OnTabChanged(HWND hControl, int Se
 		buffer += _T("The debug type in header has no publicized definitions.");
 	}
 
-	Edit_SetText(hEditDebugData, (LPTSTR) buffer.c_str());
+	Edit_SetText(m_hEditDebugData, (LPTSTR) buffer.c_str());
 
 	// Insert ListView items for Debug Directory view
 	LV_ITEM item;
 	ZeroMemory(&item, sizeof(LV_ITEM));
 
-	for (unsigned int i = 0; i < DebugDirInfo.size(); i++)
+	for (unsigned int i = 0; i < m_DebugDirInfo.size(); i++)
 	{
 		item.iItem = i;
 		item.iSubItem = 0;
 		item.mask = LVIF_TEXT;
-		item.pszText = (LPTSTR) DebugDirInfo[i].szText.c_str();
-		ListView_InsertItem(hListViewDebugDir, &item);
+		item.pszText = (LPTSTR) m_DebugDirInfo[i].szText.c_str();
+		ListView_InsertItem(m_hListViewDebugDir, &item);
 
 		item.iSubItem = 1;
-		item.pszText = (LPTSTR) DebugDirInfo[i].szData.c_str();
-		ListView_SetItem(hListViewDebugDir, &item);
+		item.pszText = (LPTSTR) m_DebugDirInfo[i].szData.c_str();
+		ListView_SetItem(m_hListViewDebugDir, &item);
 
 		item.iSubItem = 2;
-		item.pszText = (LPTSTR) DebugDirInfo[i].szComments.c_str();
-		ListView_SetItem(hListViewDebugDir, &item);
+		item.pszText = (LPTSTR) m_DebugDirInfo[i].szComments.c_str();
+		ListView_SetItem(m_hListViewDebugDir, &item);
 	}
 
 	// Resize columns
 	for (unsigned int i = 0; i < GetArraySize(GenericColumnText); i++)
-		ListView_SetColumnWidth(hListViewDebugDir, i,
+		ListView_SetColumnWidth(m_hListViewDebugDir, i,
 											i == GetArraySize(GenericColumnText) - 1 ? LVSCW_AUTOSIZE_USEHEADER : LVSCW_AUTOSIZE);
 }

@@ -1,0 +1,8 @@
+LIBRARY		ManagedFuncs
+	EXPORTS
+		createResourceReader
+		destroyResourceReader
+		getNoOfResourceStreamNames
+		getResourceStreamName
+		selectResourceStream
+		getNextResourceSelectedStreamKeyAndValue

@@ -1,5 +1,5 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
-<Project DefaultTargets="Build" ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+<Project DefaultTargets="Build" ToolsVersion="12.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
       <Configuration>Debug</Configuration>
@@ -19,32 +19,35 @@
     </ProjectConfiguration>
   </ItemGroup>
   <PropertyGroup Label="Globals">
-    <ProjectGuid>{491E1B01-698B-4B94-AE6C-A237CF9E8E85}</ProjectGuid>
-    <Keyword>AtlProj</Keyword>
+    <ProjectGuid>{F4C8F31B-E24D-4626-9D2E-73BAB40E1FD4}</ProjectGuid>
+    <Keyword>Win32Proj</Keyword>
+    <RootNamespace>PEPropPageExt</RootNamespace>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
     <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
-    <UseOfAtl>Dynamic</UseOfAtl>
+    <PlatformToolset>v120_xp</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
     <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
-    <UseOfAtl>Dynamic</UseOfAtl>
+    <PlatformToolset>v120_xp</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
     <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
-    <UseOfAtl>Dynamic</UseOfAtl>
+    <PlatformToolset>v120_xp</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
     <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
-    <UseOfAtl>Dynamic</UseOfAtl>
+    <PlatformToolset>v120_xp</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
@@ -64,189 +67,145 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
-    <IgnoreImportLibrary>true</IgnoreImportLibrary>
     <LinkIncremental>true</LinkIncremental>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <IgnoreImportLibrary>true</IgnoreImportLibrary>
     <LinkIncremental>true</LinkIncremental>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
-    <IgnoreImportLibrary>true</IgnoreImportLibrary>
     <LinkIncremental>false</LinkIncremental>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <IgnoreImportLibrary>true</IgnoreImportLibrary>
     <LinkIncremental>false</LinkIncremental>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
-      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeader>
+      </PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
-      <PreprocessorDefinitions>WIN32;_WINDOWS;_DEBUG;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(SolutionDir)libudis86\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
-    <Midl>
-      <MkTypLibCompatible>false</MkTypLibCompatible>
-      <TargetEnvironment>Win32</TargetEnvironment>
-      <PreprocessorDefinitions>_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <HeaderFileName>PEPropPageExt_i.h</HeaderFileName>
-      <InterfaceIdentifierFileName>PEPropPageExt_i.c</InterfaceIdentifierFileName>
-      <ProxyFileName>PEPropPageExt_p.c</ProxyFileName>
-      <GenerateStublessProxies>true</GenerateStublessProxies>
-      <TypeLibraryName>$(IntDir)PEPropPageExt.tlb</TypeLibraryName>
-      <DllDataFileName>
-      </DllDataFileName>
-      <ValidateAllParameters>true</ValidateAllParameters>
-    </Midl>
-    <ResourceCompile>
-      <Culture>0x0409</Culture>
-      <AdditionalIncludeDirectories>$(IntDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-    </ResourceCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
-      <ModuleDefinitionFile>.\PEPropPageExt.def</ModuleDefinitionFile>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <RegisterOutput>true</RegisterOutput>
+      <AdditionalDependencies>gdiplus.lib;comctl32.lib;UxTheme.lib;Dbghelp.lib;Imagehlp.lib;Delayimp.lib;Windowscodecs.lib;Delay Load DLLs\x86\libstdc++-6.lib;$(SolutionDir)Debug\libudis86.lib;$(SolutionDir)Debug\ManagedFuncs.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <DelayLoadDLLs>libstdc++-6.dll;ManagedFuncs.dll</DelayLoadDLLs>
+      <ModuleDefinitionFile>Exports.def</ModuleDefinitionFile>
     </Link>
+    <Manifest>
+      <AdditionalManifestFiles>$(ProjectDir)Resources\Manifest\PEPropPageExt.manifest %(AdditionalManifestFiles)</AdditionalManifestFiles>
+    </Manifest>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
-      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <PrecompiledHeader>
+      </PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
-      <PreprocessorDefinitions>WIN32;_WINDOWS;_DEBUG;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(SolutionDir)libudis86\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
-    <Midl>
-      <MkTypLibCompatible>false</MkTypLibCompatible>
-      <PreprocessorDefinitions>_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <HeaderFileName>PEPropPageExt_i.h</HeaderFileName>
-      <InterfaceIdentifierFileName>PEPropPageExt_i.c</InterfaceIdentifierFileName>
-      <ProxyFileName>PEPropPageExt_p.c</ProxyFileName>
-      <GenerateStublessProxies>true</GenerateStublessProxies>
-      <TypeLibraryName>$(IntDir)PEPropPageExt.tlb</TypeLibraryName>
-      <DllDataFileName>
-      </DllDataFileName>
-    </Midl>
-    <ResourceCompile>
-      <Culture>0x0409</Culture>
-      <AdditionalIncludeDirectories>$(IntDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-    </ResourceCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
-      <ModuleDefinitionFile>.\PEPropPageExt.def</ModuleDefinitionFile>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <RegisterOutput>true</RegisterOutput>
-      <AdditionalDependencies>gdiplus.lib;comctl32.lib;Dbghelp.lib;Imagehlp.lib;$(SolutionDir)x64\Debug\libudis86.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalManifestDependencies>
-      </AdditionalManifestDependencies>
+      <AdditionalDependencies>gdiplus.lib;comctl32.lib;UxTheme.lib;Dbghelp.lib;Imagehlp.lib;DelayImp.lib;Windowscodecs.lib;$(ProjectDir)Delay Load DLLs\x64\libstdc++-6.lib;$(SolutionDir)x64\Debug\libudis86.lib;$(SolutionDir)x64\Debug\ManagedFuncs.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <ModuleDefinitionFile>Exports.def</ModuleDefinitionFile>
+      <DelayLoadDLLs>libstdc++-6.dll;ManagedFuncs.dll</DelayLoadDLLs>
+      <SupportNobindOfDelayLoadedDLL>
+      </SupportNobindOfDelayLoadedDLL>
+      <SupportUnloadOfDelayLoadedDLL>true</SupportUnloadOfDelayLoadedDLL>
     </Link>
     <Manifest>
-      <InputResourceManifests>
-      </InputResourceManifests>
+      <AdditionalManifestFiles>$(ProjectDir)Resources\Manifest\PEPropPageExt.manifest</AdditionalManifestFiles>
     </Manifest>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <ClCompile>
-      <PrecompiledHeader>Use</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
+      <PrecompiledHeader>
+      </PrecompiledHeader>
       <Optimization>MaxSpeed</Optimization>
-      <PreprocessorDefinitions>WIN32;_WINDOWS;NDEBUG;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(SolutionDir)libudis86\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
-    <Midl>
-      <MkTypLibCompatible>false</MkTypLibCompatible>
-      <TargetEnvironment>Win32</TargetEnvironment>
-      <PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <HeaderFileName>PEPropPageExt_i.h</HeaderFileName>
-      <InterfaceIdentifierFileName>PEPropPageExt_i.c</InterfaceIdentifierFileName>
-      <ProxyFileName>PEPropPageExt_p.c</ProxyFileName>
-      <GenerateStublessProxies>true</GenerateStublessProxies>
-      <TypeLibraryName>$(IntDir)PEPropPageExt.tlb</TypeLibraryName>
-      <DllDataFileName>
-      </DllDataFileName>
-      <ValidateAllParameters>true</ValidateAllParameters>
-    </Midl>
-    <ResourceCompile>
-      <Culture>0x0409</Culture>
-      <AdditionalIncludeDirectories>$(IntDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-    </ResourceCompile>
     <Link>
-      <SubSystem>Windows</SubSystem>
-      <ModuleDefinitionFile>.\PEPropPageExt.def</ModuleDefinitionFile>
+      <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <RegisterOutput>true</RegisterOutput>
+      <AdditionalDependencies>gdiplus.lib;comctl32.lib;UxTheme.lib;Dbghelp.lib;Imagehlp.lib;Delayimp.lib;Windowscodecs.lib;Delay Load DLLs\x86\libstdc++-6.lib;$(SolutionDir)Release\libudis86.lib;$(SolutionDir)Release\ManagedFuncs.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <ModuleDefinitionFile>Exports.def</ModuleDefinitionFile>
+      <DelayLoadDLLs>libstdc++-6.dll;ManagedFuncs.dll</DelayLoadDLLs>
     </Link>
+    <Manifest>
+      <AdditionalManifestFiles>$(ProjectDir)Resources\Manifest\PEPropPageExt.manifest %(AdditionalManifestFiles)</AdditionalManifestFiles>
+    </Manifest>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
-      <PrecompiledHeader>Use</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
+      <PrecompiledHeader>
+      </PrecompiledHeader>
       <Optimization>MaxSpeed</Optimization>
-      <PreprocessorDefinitions>WIN32;_WINDOWS;NDEBUG;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(SolutionDir)libudis86\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
-    <Midl>
-      <MkTypLibCompatible>false</MkTypLibCompatible>
-      <PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <HeaderFileName>PEPropPageExt_i.h</HeaderFileName>
-      <InterfaceIdentifierFileName>PEPropPageExt_i.c</InterfaceIdentifierFileName>
-      <ProxyFileName>PEPropPageExt_p.c</ProxyFileName>
-      <GenerateStublessProxies>true</GenerateStublessProxies>
-      <TypeLibraryName>$(IntDir)PEPropPageExt.tlb</TypeLibraryName>
-      <DllDataFileName>
-      </DllDataFileName>
-    </Midl>
-    <ResourceCompile>
-      <Culture>0x0409</Culture>
-      <AdditionalIncludeDirectories>$(IntDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-    </ResourceCompile>
     <Link>
-      <SubSystem>Windows</SubSystem>
-      <ModuleDefinitionFile>.\PEPropPageExt.def</ModuleDefinitionFile>
+      <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <RegisterOutput>true</RegisterOutput>
+      <AdditionalDependencies>gdiplus.lib;comctl32.lib;UxTheme.lib;Dbghelp.lib;Imagehlp.lib;DelayImp.lib;Windowscodecs.lib;$(ProjectDir)Delay Load DLLs\x64\libstdc++-6.lib;$(SolutionDir)x64\Release\libudis86.lib;$(SolutionDir)x64\Release\ManagedFuncs.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <ModuleDefinitionFile>Exports.def</ModuleDefinitionFile>
+      <DelayLoadDLLs>libstdc++-6.dll;ManagedFuncs.dll</DelayLoadDLLs>
     </Link>
+    <Manifest>
+      <AdditionalManifestFiles>$(ProjectDir)Resources\Manifest\PEPropPageExt.manifest %(AdditionalManifestFiles)</AdditionalManifestFiles>
+    </Manifest>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="AnimationControl.h" />
+    <ClInclude Include="CommonDefs.h" />
+    <ClInclude Include="CustomCodeViewDefs.h" />
+    <ClInclude Include="CustomCorDefs.h" />
+    <ClInclude Include="CWindow.h" />
+    <ClInclude Include="cxxabi.h" />
+    <ClInclude Include="DialogControl.h" />
+    <ClInclude Include="EditControl.h" />
+    <ClInclude Include="IconControl.h" />
+    <ClInclude Include="ImageToHBITMAP.h" />
+    <ClInclude Include="ManagedFuncs.h" />
+    <ClInclude Include="MiscFuncs.h" />
+    <ClInclude Include="PEPropPageExt.h" />
+    <ClInclude Include="PEReadWrite.h" />
+    <ClInclude Include="PictureBoxControl.h" />
+    <ClInclude Include="PropertyPageHandler.h" />
+    <ClInclude Include="resource.h" />
+    <ClInclude Include="RTTI.h" />
+    <ClInclude Include="Settings.h" />
+    <ClInclude Include="SimpleLayoutManager.h" />
+    <ClInclude Include="stdafx.h" />
+    <ClInclude Include="targetver.h" />
+    <ClInclude Include="unique_handle.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="AnimationControl.cpp" />
     <ClCompile Include="cxxabi.cpp" />
-    <ClCompile Include="dllmain.cpp">
-      <CompileAsManaged Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</CompileAsManaged>
-      <CompileAsManaged Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</CompileAsManaged>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
-      </PrecompiledHeader>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-      </PrecompiledHeader>
-      <CompileAsManaged Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">false</CompileAsManaged>
-      <CompileAsManaged Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</CompileAsManaged>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
-      </PrecompiledHeader>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-      </PrecompiledHeader>
-    </ClCompile>
+    <ClCompile Include="DialogControl.cpp" />
+    <ClCompile Include="dllmain.cpp" />
+    <ClCompile Include="EditControl.cpp" />
+    <ClCompile Include="IconControl.cpp" />
+    <ClCompile Include="ImageToHBITMAP.cpp" />
+    <ClCompile Include="ManagedFuncs.cpp" />
     <ClCompile Include="MiscFuncs.cpp" />
     <ClCompile Include="PEPropPageExt.cpp" />
-    <ClCompile Include="PEPropPageExt_i.c">
-      <CompileAsManaged Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</CompileAsManaged>
-      <CompileAsManaged Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</CompileAsManaged>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
-      </PrecompiledHeader>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-      </PrecompiledHeader>
-      <CompileAsManaged Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">false</CompileAsManaged>
-      <CompileAsManaged Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</CompileAsManaged>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
-      </PrecompiledHeader>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-      </PrecompiledHeader>
-    </ClCompile>
-    <ClCompile Include="PEReadWrite.cpp" />
+    <ClCompile Include="PictureBoxControl.cpp" />
     <ClCompile Include="PropertyPageHandler.cpp" />
     <ClCompile Include="PropertyPageHandler_BaseReloc.cpp" />
     <ClCompile Include="PropertyPageHandler_CLR.cpp" />
@@ -256,65 +215,38 @@
     <ClCompile Include="PropertyPageHandler_Imports.cpp" />
     <ClCompile Include="PropertyPageHandler_LoadConfiguration.cpp" />
     <ClCompile Include="PropertyPageHandler_Manifest.cpp" />
+    <ClCompile Include="PropertyPageHandler_MSDOSHeader.cpp" />
     <ClCompile Include="PropertyPageHandler_Overview.cpp" />
     <ClCompile Include="PropertyPageHandler_PEHeaders.cpp" />
-    <ClCompile Include="PropertyPageHandler_MSDOSHeader.cpp" />
     <ClCompile Include="PropertyPageHandler_Resources.cpp" />
     <ClCompile Include="PropertyPageHandler_Sections.cpp" />
     <ClCompile Include="PropertyPageHandler_TLS.cpp" />
     <ClCompile Include="PropertyPageHandler_Tools.cpp" />
-    <ClCompile Include="ScopedPointerVector.cpp" />
-    <ClCompile Include="Settings.cpp" />
     <ClCompile Include="SimpleLayoutManager.cpp" />
-    <ClCompile Include="stdafx.cpp">
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Create</PrecompiledHeader>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
-    </ClCompile>
+    <ClCompile Include="stdafx.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="CommonDefs.h" />
-    <ClInclude Include="CustomCodeViewDefs.h" />
-    <ClInclude Include="CustomCorDefs.h" />
-    <ClInclude Include="cxxabi.h" />
-    <ClInclude Include="dllmain.h" />
-    <ClInclude Include="MiscFuncs.h" />
-    <ClInclude Include="PEPropPageExt.h" />
-    <ClInclude Include="PEPropPageExt_i.h" />
-    <ClInclude Include="PEReadWrite.h" />
-    <ClInclude Include="PropertyPageHandler.h" />
-    <ClInclude Include="Resource.h" />
-    <ClInclude Include="RTTI.h" />
-    <ClInclude Include="ScopedPointerVector.h" />
-    <ClInclude Include="Settings.h" />
-    <ClInclude Include="SimpleLayoutManager.h" />
-    <ClInclude Include="stdafx.h" />
-    <ClInclude Include="targetver.h" />
-    <ClInclude Include="udis86.h" />
+    <ResourceCompile Include="Resources.rc" />
   </ItemGroup>
   <ItemGroup>
-    <ResourceCompile Include="PEPropPageExt.rc" />
+    <ProjectReference Include="..\libudis86\libudis86.vcxproj">
+      <Project>{967ebff8-4373-41e5-81a8-2e375c9ad0f5}</Project>
+    </ProjectReference>
   </ItemGroup>
   <ItemGroup>
-    <None Include="Failed case studies.txt" />
-    <None Include="PEPropPageExt.def" />
-    <None Include="PEPropPageExt.rgs" />
-    <None Include="ReadMe.txt" />
-    <None Include="PEPropPageExt.manifest" />
-    <None Include="Resources\Images\Correct.bmp" />
-    <None Include="resources\images\iconPropertyPage.ico" />
-    <None Include="Resources\Images\Incorrect.bmp" />
+    <None Include="Exports.def" />
+    <None Include="Resources\Scripts\RegistrationScript.rgs" />
   </ItemGroup>
   <ItemGroup>
-    <Midl Include="PEPropPageExt.idl" />
+    <Manifest Include="Resources\Manifest\PEPropPageExt.manifest" />
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="Resources\Images\iconPropertyPage.ico" />
+  </ItemGroup>
+  <ItemGroup>
+    <Text Include="README.txt" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
-  <ProjectExtensions>
-    <VisualStudio>
-      <UserProperties RESOURCE_FILE="PEPropPageExt.rc" />
-    </VisualStudio>
-  </ProjectExtensions>
 </Project>

@@ -59,7 +59,10 @@ public:
 	void SetRelativeVertPos(int id, int idRelative, bool bAlign = false);
 
 	void DoLayout(WPARAM wSizeType, LPARAM lParam);
+	void DoLayout();
 	BOOL DoSizing(RECT* pRect);
+
+	void RemoveChildConstraint(int id);
 };
 
 

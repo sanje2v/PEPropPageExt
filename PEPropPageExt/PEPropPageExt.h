@@ -1,11 +1,7 @@
 #pragma once
-
 #include "stdafx.h"
-#include "PEPropPageExt_i.h"
 #include "PEReadWrite.h"
 #include <ShlObj.h>
-
-using namespace ATL;
 
 
 // CPEPropPageExt
@@ -16,34 +12,34 @@ class ATL_NO_VTABLE CPEPropPageExt :
 	public IShellPropSheetExt
 {
 private:
-	HMODULE hRichEditDll;
-	PEReadWrite PEReaderWriter;
+	static UINT CALLBACK PropertyPageLifeEventCallback(HWND hWnd,
+													   UINT uMsg,
+													   LPPROPSHEETPAGE ppsp);
+	static INT_PTR CALLBACK PropertyPagesProc(HWND hWnd,
+											  UINT uMsg,
+											  WPARAM wParam,
+											  LPARAM lParam);
 
-	static UINT CALLBACK PropertyPageLifeEventCallback(HWND hWnd, UINT uMsg, LPPROPSHEETPAGE ppsp);
-	static INT_PTR CALLBACK PropertyPagesProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
+	PEReadWrite m_PEReaderWriter;
 
 public:
-	CPEPropPageExt() {}
+	CPEPropPageExt();
+	~CPEPropPageExt();
 
-	DECLARE_REGISTRY_RESOURCEID(IDR_PEPROPPAGEEXT)
+	DECLARE_REGISTRY_RESOURCEID(IDR_REGISTRATIONSCRIPT)
 	DECLARE_NOT_AGGREGATABLE(CPEPropPageExt)
 
 	BEGIN_COM_MAP(CPEPropPageExt)
 		COM_INTERFACE_ENTRY(IShellExtInit)
-        COM_INTERFACE_ENTRY(IShellPropSheetExt)
+		COM_INTERFACE_ENTRY(IShellPropSheetExt)
 	END_COM_MAP()
 
-	DECLARE_PROTECT_FINAL_CONSTRUCT()
+	// IShellExtInit
+	STDMETHODIMP Initialize(LPCITEMIDLIST, LPDATAOBJECT, HKEY);
 
-	HRESULT FinalConstruct();
-	void FinalRelease();
-
-    // IShellExtInit
-    STDMETHODIMP Initialize(LPCITEMIDLIST, LPDATAOBJECT, HKEY);
-
-    // IShellPropSheetExt
-    STDMETHODIMP AddPages(LPFNADDPROPSHEETPAGE, LPARAM);
-    STDMETHODIMP ReplacePage(UINT, LPFNADDPROPSHEETPAGE, LPARAM) { return E_NOTIMPL; }
+	// IShellPropSheetExt
+	STDMETHODIMP AddPages(LPFNADDPROPSHEETPAGE, LPARAM);
+	STDMETHODIMP ReplacePage(UINT, LPFNADDPROPSHEETPAGE, LPARAM) { return E_NOTIMPL; }
 };
 
 OBJECT_ENTRY_AUTO(__uuidof(PEPropPageExt), CPEPropPageExt)

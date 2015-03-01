@@ -1,15 +1,16 @@
+#include "stdafx.h"
 #include "PropertyPageHandler.h"
 
 
 PropertyPageHandler_TLS::PropertyPageHandler_TLS(HWND hWnd, PEReadWrite& PEReaderWriter)
-	: PropertyPageHandler(hWnd, PEReaderWriter)
+	: PropertyPageHandler(hWnd, std::ref(PEReaderWriter))
 {
 	m_hListViewTLSData = GetDlgItem(m_hWnd, IDC_LISTTLSDATA);
 	m_hListViewCallbacks = GetDlgItem(m_hWnd, IDC_LISTTLSCALLBACKS);
 
 	// Setup controls with layout manager
-	m_pLayoutManager->AddChildConstraint(IDC_LISTLOADCONFIG, CWA_LEFTRIGHT, CWA_TOP);
-	m_pLayoutManager->AddChildConstraint(IDC_LISTTLSCALLBACKS, CWA_LEFTRIGHT, CWA_TOPBOTTOM);
+	m_LayoutManager.AddChildConstraint(IDC_LISTTLSDATA, CWA_LEFTRIGHT, CWA_TOP);
+	m_LayoutManager.AddChildConstraint(IDC_LISTTLSCALLBACKS, CWA_LEFTRIGHT, CWA_TOPBOTTOM);
 
 	// Set full row selection style for listviews
 	ListView_SetExtendedListViewStyleEx(m_hListViewTLSData, LVS_EX_FULLROWSELECT, LVS_EX_FULLROWSELECT);
@@ -19,137 +20,160 @@ void PropertyPageHandler_TLS::OnInitDialog()
 {
 	// Fill them with data
 	vector<TextAndData> TLSItemsInfo;
+	PEReadWrite::PEType PEType = m_PEReaderWriter.getPEType();
 
-	switch (m_PEReaderWriter.GetPEType())
+	union
 	{
-	case PEReadWrite::PE32:
-		{
-			PIMAGE_TLS_DIRECTORY32 pTLSData = (PIMAGE_TLS_DIRECTORY32) m_PEReaderWriter.GetTLSDirectory();
+		PIMAGE_TLS_DIRECTORY32 pTLSData32;
+		PIMAGE_TLS_DIRECTORY64 pTLSData64;
+	};
 
-			FillData(TLSItemsInfo, _T("Raw Data Start (VA)"), DWORD_toString(pTLSData->StartAddressOfRawData, Hexadecimal));
-			FillData(TLSItemsInfo, _T("Raw Data End (VA)"), DWORD_toString(pTLSData->EndAddressOfRawData, Hexadecimal));
-			FillData(TLSItemsInfo, _T("Address of Index (VA)"), DWORD_toString(pTLSData->AddressOfIndex, Hexadecimal));
-			FillData(TLSItemsInfo, _T("Address of Callbacks (VA)"), DWORD_toString(pTLSData->AddressOfCallBacks, Hexadecimal));
-			FillData(TLSItemsInfo, _T("Size of Zero Fill"), DWORD_toString(pTLSData->SizeOfZeroFill), FormattedBytesSize(pTLSData->SizeOfZeroFill));
-			FillData(TLSItemsInfo, _T("Characteristics"), DWORD_toString(pTLSData->Characteristics), _T("Reserved, must be zero"));
+	int err;
+	switch (PEType)
+	{
+		case PEReadWrite::PEType::PE32:
+		{
+			err = m_PEReaderWriter.getTLSDirectory(std::ref(pTLSData32));
+			if (err)
+			{
+				LogError(L"ERROR: Couldn't read 'IMAGE_TLS_DIRECTORY32' header. File is not valid.", true);
+				return;
+			}
+
+			TLSItemsInfo =
+			{
+				{ L"Raw Data Start (VA)", DWORD_toString(pTLSData32->StartAddressOfRawData, Hexadecimal) },
+				{ L"Raw Data End (VA)", DWORD_toString(pTLSData32->EndAddressOfRawData, Hexadecimal) },
+				{ L"Addr of Index (VA)", DWORD_toString(pTLSData32->AddressOfIndex, Hexadecimal) },
+				{ L"Addr of Callbacks (VA)", DWORD_toString(pTLSData32->AddressOfCallBacks, Hexadecimal) },
+				{ L"Size of Zero Fill", DWORD_toString(pTLSData32->SizeOfZeroFill), FormattedBytesSize(pTLSData32->SizeOfZeroFill) },
+				{ L"Characteristics", DWORD_toString(pTLSData32->Characteristics), L"Reserved, must be zero" }
+			};
 		}
 
 		break;
 
-	case PEReadWrite::PE64:
+		case PEReadWrite::PEType::PE64:
 		{
-			PIMAGE_TLS_DIRECTORY64 pTLSData = (PIMAGE_TLS_DIRECTORY64) m_PEReaderWriter.GetTLSDirectory();
+			err = m_PEReaderWriter.getTLSDirectory(std::ref(pTLSData64));
+			if (err)
+			{
+				LogError(L"ERROR: Couldn't read 'IMAGE_TLS_DIRECTORY64' header. File is not valid.", true);
+				return;
+			}
 
-			FillData(TLSItemsInfo, _T("Raw Data Start (VA)"), QWORD_toString(pTLSData->StartAddressOfRawData, Hexadecimal));
-			FillData(TLSItemsInfo, _T("Raw Data End (VA)"), QWORD_toString(pTLSData->EndAddressOfRawData, Hexadecimal));
-			FillData(TLSItemsInfo, _T("Address of Index (VA)"), QWORD_toString(pTLSData->AddressOfIndex, Hexadecimal));
-			FillData(TLSItemsInfo, _T("Address of Callbacks (VA)"), QWORD_toString(pTLSData->AddressOfCallBacks, Hexadecimal));
-			FillData(TLSItemsInfo, _T("Size of Zero Fill"), DWORD_toString(pTLSData->SizeOfZeroFill), FormattedBytesSize(pTLSData->SizeOfZeroFill));
-			FillData(TLSItemsInfo, _T("Characteristics"), DWORD_toString(pTLSData->Characteristics), _T("Reserved, must be zero"));
+			TLSItemsInfo =
+			{
+				{ L"Raw Data Start (VA)", QWORD_toString(pTLSData64->StartAddressOfRawData, Hexadecimal) },
+				{ L"Raw Data End (VA)", QWORD_toString(pTLSData64->EndAddressOfRawData, Hexadecimal) },
+				{ L"Addr of Index (VA)", QWORD_toString(pTLSData64->AddressOfIndex, Hexadecimal) },
+				{ L"Addr of Callbacks (VA)", QWORD_toString(pTLSData64->AddressOfCallBacks, Hexadecimal) },
+				{ L"Size of Zero Fill", DWORD_toString(pTLSData64->SizeOfZeroFill), FormattedBytesSize(pTLSData64->SizeOfZeroFill) },
+				{ L"Characteristics", DWORD_toString(pTLSData64->Characteristics), L"Reserved, must be zero" }
+			};
 		}
 
 		break;
+
+		default:
+			LogError(L"ERROR: This type of Portable Executable doesn't have any Thread Local Storage data.", true);
+			return;
 	}
 
 	// Insert ListView columns for 'hListViewTLSData'
 	LV_COLUMN column;
-	ZeroMemory(&column, sizeof(LV_COLUMN));
+	ZeroMemory(&column, sizeof(column));
 
-	for (unsigned int i = 0; i < GetArraySize(GenericColumnText); i++)
+	for (size_t i = 0; i < ARRAYSIZE(szGenericColumnText); ++i)
 	{
 		column.mask = LVCF_TEXT;
-		column.pszText = GenericColumnText[i];
+		column.pszText = szGenericColumnText[i];
 		ListView_InsertColumn(m_hListViewTLSData, i, &column);
 	}
 
 	// Insert ListView columns for 'hListViewCallbacks'
-	static LPTSTR CallbacksColumnText[] = {_T("Index"), _T("RVA")};
+	static LPWSTR szCallbacksColumnText[] = { L"Index", L"RVA" };
 
-	for (unsigned int i = 0; i < GetArraySize(CallbacksColumnText); i++)
+	for (size_t i = 0; i < ARRAYSIZE(szCallbacksColumnText); ++i)
 	{
 		column.mask = LVCF_TEXT;
-		column.pszText = CallbacksColumnText[i];
+		column.pszText = szCallbacksColumnText[i];
 		ListView_InsertColumn(m_hListViewCallbacks, i, &column);
 	}
 
 	// Insert ListView items for 'hListViewTLSData'
 	LV_ITEM item;
-	ZeroMemory(&item, sizeof(LV_ITEM));
+	ZeroMemory(&item, sizeof(item));
 
-	for (unsigned int i = 0; i < TLSItemsInfo.size(); i++)
+	for (size_t i = 0; i < TLSItemsInfo.size(); ++i)
 	{
-		item.iItem = i;
+		item.iItem = int(i);
 		item.iSubItem = 0;
 		item.mask = LVIF_TEXT;
-		item.pszText = (LPTSTR) TLSItemsInfo[i].szText.c_str();
+		item.pszText = LPWSTR(_wcsdup(TLSItemsInfo[i].Text.c_str()));
 		ListView_InsertItem(m_hListViewTLSData, &item);
+		free(item.pszText);
 
 		item.iSubItem = 1;
-		item.pszText = (LPTSTR) TLSItemsInfo[i].szData.c_str();
+		item.pszText = LPWSTR(_wcsdup(TLSItemsInfo[i].Data.c_str()));
 		ListView_SetItem(m_hListViewTLSData, &item);
+		free(item.pszText);
 
 		item.iSubItem = 2;
-		item.pszText = (LPTSTR) TLSItemsInfo[i].szComments.c_str();
+		item.pszText = LPWSTR(_wcsdup(TLSItemsInfo[i].Comments.c_str()));
 		ListView_SetItem(m_hListViewTLSData, &item);
+		free(item.pszText);
 	}
 
 	// Insert ListView items for 'hListViewCallbacks'
-	unsigned int i = 0;
-	ZeroMemory(&item, sizeof(LV_ITEM));
+	int i = 0;
+	ZeroMemory(&item, sizeof(item));
 
-	switch (m_PEReaderWriter.GetPEType())
+	switch (PEType)
 	{
-	case PEReadWrite::PE32:
+		case PEReadWrite::PEType::PE32:
 		{
-			PIMAGE_NT_HEADERS32 pNTheaders32 = m_PEReaderWriter.GetSecondaryHeader<PIMAGE_NT_HEADERS32>();
-			PIMAGE_TLS_DIRECTORY32 pTLSData = (PIMAGE_TLS_DIRECTORY32) m_PEReaderWriter.GetTLSDirectory();
-			DWORD Callback = ((LPDWORD) m_PEReaderWriter.GetVA(pTLSData->AddressOfCallBacks - pNTheaders32->OptionalHeader.ImageBase))[i];
+			DWORD Callback = m_PEReaderWriter.getTLSCallbackByIndex(pTLSData32, i);
 
 			while (Callback)
 			{
-				tstring dummy;
-
 				item.iItem = i;
 				item.iSubItem = 0;
 				item.mask = LVIF_TEXT;
-				dummy = DWORD_toString(i);
-				item.pszText = (LPTSTR) dummy.c_str();
+				item.pszText = LPWSTR(_wcsdup(DWORD_toString(i).c_str()));
 				ListView_InsertItem(m_hListViewCallbacks, &item);
+				free(item.pszText);
 
 				item.iSubItem = 1;
-				dummy = DWORD_toString(Callback, Hexadecimal);
-				item.pszText = (LPTSTR) dummy.c_str();
+				item.pszText = LPWSTR(_wcsdup(DWORD_toString(Callback, Hexadecimal).c_str()));
 				ListView_SetItem(m_hListViewCallbacks, &item);
+				free(item.pszText);
 
-				Callback = ((LPDWORD) m_PEReaderWriter.GetVA(pTLSData->AddressOfCallBacks - pNTheaders32->OptionalHeader.ImageBase))[++i];
+				Callback = m_PEReaderWriter.getTLSCallbackByIndex(pTLSData32, ++i);
 			}
 		}
 
 		break;
 
-	case PEReadWrite::PE64:
+		case PEReadWrite::PEType::PE64:
 		{
-			PIMAGE_NT_HEADERS64 pNTheaders64 = m_PEReaderWriter.GetSecondaryHeader<PIMAGE_NT_HEADERS64>();
-			PIMAGE_TLS_DIRECTORY64 pTLSData = (PIMAGE_TLS_DIRECTORY64) m_PEReaderWriter.GetTLSDirectory();
-			ULONGLONG Callback = ((PULONGLONG) m_PEReaderWriter.GetVA((DWORD) (pTLSData->AddressOfCallBacks - pNTheaders64->OptionalHeader.ImageBase)))[i];
+			ULONGLONG Callback = m_PEReaderWriter.getTLSCallbackByIndex(pTLSData64, i);
 
 			while (Callback)
 			{
-				tstring dummy;
-
 				item.iItem = i;
 				item.iSubItem = 0;
 				item.mask = LVIF_TEXT;
-				dummy = QWORD_toString(i);
-				item.pszText = (LPTSTR) dummy.c_str();
+				item.pszText = LPWSTR(_wcsdup(QWORD_toString(i).c_str()));
 				ListView_InsertItem(m_hListViewCallbacks, &item);
+				free(item.pszText);
 
 				item.iSubItem = 1;
-				dummy = QWORD_toString(Callback, Hexadecimal);
-				item.pszText = (LPTSTR) dummy.c_str();
+				item.pszText = LPWSTR(_wcsdup(QWORD_toString(Callback, Hexadecimal).c_str()));
 				ListView_SetItem(m_hListViewCallbacks, &item);
+				free(item.pszText);
 
-				Callback = ((PULONGLONG) m_PEReaderWriter.GetVA((DWORD) (pTLSData->AddressOfCallBacks - pNTheaders64->OptionalHeader.ImageBase)))[++i];
+				Callback = m_PEReaderWriter.getTLSCallbackByIndex(pTLSData64, ++i);
 			}
 		}
 
@@ -157,10 +181,12 @@ void PropertyPageHandler_TLS::OnInitDialog()
 	}
 
 	// Resize columns for 'hListViewTLSData'
-	for (unsigned int i = 0; i < GetArraySize(GenericColumnText); i++)
-		ListView_SetColumnWidth(m_hListViewTLSData, i, i == GetArraySize(GenericColumnText) - 1 ? LVSCW_AUTOSIZE_USEHEADER : LVSCW_AUTOSIZE);
+	for (size_t i = 0; i < ARRAYSIZE(szGenericColumnText); ++i)
+		ListView_SetColumnWidth(m_hListViewTLSData,
+		                        i,
+								(i == ARRAYSIZE(szGenericColumnText) - 1 ? LVSCW_AUTOSIZE_USEHEADER : LVSCW_AUTOSIZE));
 
 	// Resize columns for 'hListViewCallbacks'
-	for (unsigned int i = 0; i < GetArraySize(CallbacksColumnText); i++)
+	for (size_t i = 0; i < ARRAYSIZE(szCallbacksColumnText); ++i)
 		ListView_SetColumnWidth(m_hListViewCallbacks, i, LVSCW_AUTOSIZE_USEHEADER);
 }

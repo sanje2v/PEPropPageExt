@@ -1,7 +1,6 @@
 // Copyright (c) 2003 Daniel Horn
 
 #include "stdafx.h"
-
 #include "SimpleLayoutManager.h"
 
 #if !defined(max)
@@ -349,6 +348,46 @@ BOOL SimpleLayoutManager::DoSizing(RECT* pRect)
 	return TRUE;
 }
 
+void SimpleLayoutManager::RemoveChildConstraint(int id)
+{
+	ChildWindowConstraint *prevconstraint = listConstraints;
+	ChildWindowConstraint *constraint = (prevconstraint != NULL ? listConstraints->next : NULL);
+	
+	if (prevconstraint == NULL)
+		return;
+
+	if (constraint == NULL)
+	{
+		if (prevconstraint->id == id)
+			delete prevconstraint;
+
+		return;
+	}
+
+	if (prevconstraint->id == id)
+	{
+		listConstraints = prevconstraint->next;
+		delete prevconstraint;
+
+		return;
+	}
+
+	while (NULL != constraint)
+	{
+		if (constraint->id == id)
+		{
+			prevconstraint->next = constraint->next;
+
+			delete constraint;
+
+			break;
+		}
+
+		prevconstraint = constraint;
+		constraint = constraint->next;
+	};
+}
+
 
 // Note that, despite the names of the parameters and local variables, this routine works for both
 // horizontal AND vertical settings, because:
@@ -534,6 +573,14 @@ void SimpleLayoutManager::DoLayout(WPARAM wSizeType, LPARAM lParam)
 	{
 		HWND hControl = GetDlgItem(hParent, constraint->id);
 
+		/*if (bIgnoreHidden)
+			if (!IsWindowVisible(hControl))
+			{
+				constraint = constraint->next;
+
+				continue;
+			}*/
+
 		RECT rect;
 		GetWindowRect(hControl, &rect);
 		MapWindowPoints(NULL, hParent, (LPPOINT)&rect, 2);
@@ -563,4 +610,12 @@ void SimpleLayoutManager::DoLayout(WPARAM wSizeType, LPARAM lParam)
 
 	prevWidth = nWidth;
 	prevHeight = nHeight;
+}
+
+
+void SimpleLayoutManager::DoLayout()
+{
+	RECT Rect;
+	GetClientRect(hParent, &Rect);
+	DoLayout(SIZE_RESTORED, MAKELPARAM(Rect.right, Rect.bottom));
 }

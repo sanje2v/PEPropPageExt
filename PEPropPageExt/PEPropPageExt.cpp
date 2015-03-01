@@ -1,220 +1,271 @@
-// PEPropPageExt.cpp : Implementation of DLL Exports.
 #include "stdafx.h"
-#include "Resource.h"
-#include "PEPropPageExt_i.h"
 #include "PEPropPageExt.h"
-#include "dllmain.h"
-#include "CommonDefs.h"
-#include "ScopedPointerVector.h"
 #include "PropertyPageHandler.h"
+#include "PictureBoxControl.h"
+#include "DialogControl.h"
 #include "Settings.h"
-#include <string>
-#include <list>
+#include "unique_handle.h"
 #include <algorithm>
-#include <Windows.h>
+#include <mutex>
 
 
-using namespace std;
+extern CPEPropPageExtModule g_PEPropPageExtModule;
 
+static std::mutex g_lockInitOnce;
+static int32_t g_cCPEPropPageExtInstances = 0;
+static HMODULE g_hRichEditDll = NULL;
 
-THREAD_ISOLATED_STORAGE HMENU hGenericContextMenu;
+HMENU g_hGenericContextMenu = NULL;
 
-HRESULT CPEPropPageExt::FinalConstruct()
+static void InitializeOnce()
 {
+	// Needed for RichEdit 2.0 control to work
+	if (g_hRichEditDll == NULL)
+		g_hRichEditDll = LoadLibrary(L"Riched20.dll"); // Load library if not yet loaded
+
 	// Load common controls library
-	INITCOMMONCONTROLSEX initcommctrl = { sizeof(INITCOMMONCONTROLSEX),
-											ICC_LISTVIEW_CLASSES | ICC_TREEVIEW_CLASSES | ICC_TAB_CLASSES };
+	INITCOMMONCONTROLSEX initcommctrl =
+	{
+		sizeof(INITCOMMONCONTROLSEX),
+		ICC_STANDARD_CLASSES |
+		ICC_ANIMATE_CLASS |
+		ICC_BAR_CLASSES |
+		ICC_COOL_CLASSES |
+		ICC_DATE_CLASSES |
+		ICC_INTERNET_CLASSES |
+		ICC_LINK_CLASS |
+		ICC_LISTVIEW_CLASSES |
+		ICC_NATIVEFNTCTL_CLASS |
+		ICC_PAGESCROLLER_CLASS |
+		ICC_PROGRESS_CLASS |
+		ICC_TAB_CLASSES |
+		ICC_TREEVIEW_CLASSES |
+		ICC_UPDOWN_CLASS |
+		ICC_USEREX_CLASSES |
+		ICC_WIN95_CLASSES
+	};
 	InitCommonControlsEx(&initcommctrl);
 
-	// Needed for RichEdit 2.0 control to work
-	hRichEditDll = LoadLibrary(_T("Riched20.dll"));
+	// Register our custom picture box control
+	PictureBoxControl::registerControlWindowClass(g_PEPropPageExtModule.getInstance());
 
+	// Register parent window class for dialog preview
+	DialogControl::registerParentWindowClass(g_PEPropPageExtModule.getInstance());
+	
 	// Create generic popup menu
-	hGenericContextMenu = LoadMenu(_AtlModule.hInstance, MAKEINTRESOURCE(IDR_GENERIC_CONTEXT_MENU));
-
-	return S_OK;
+	g_hGenericContextMenu = LoadMenu(g_PEPropPageExtModule.getInstance(),
+									 MAKEINTRESOURCE(IDR_GENERIC_CONTEXT_MENU));
 }
 
-void CPEPropPageExt::FinalRelease()
+void UninitializeOnce()
 {
-	DestroyMenu(hGenericContextMenu);
-	FreeLibrary(hRichEditDll);
+	// Unregister our custom picture box control
+	PictureBoxControl::unregisterControlWindowClass();
+
+	// Unregister parent window class for dialog preview
+	DialogControl::unregisterParentWindowClass();
 }
 
+CPEPropPageExt::CPEPropPageExt()
+{
+	// Call only-once function
+	lock_guard<mutex> lock(g_lockInitOnce);
+	if (g_cCPEPropPageExtInstances++ == 0)
+		InitializeOnce();
+}
+
+CPEPropPageExt::~CPEPropPageExt()
+{
+	lock_guard<mutex> lock(g_lockInitOnce);
+	if (--g_cCPEPropPageExtInstances == 0)
+		UninitializeOnce();
+}
 
 /////////////////////// This dll program starts running from here ///////////////////////
-STDMETHODIMP CPEPropPageExt::Initialize(LPCITEMIDLIST pidlFolder, LPDATAOBJECT pDataObj, HKEY hProgID)
+STDMETHODIMP CPEPropPageExt::Initialize(LPCITEMIDLIST pidlFolder,
+										LPDATAOBJECT pDataObj,
+										HKEY hProgID)
 {
 	// It is possible to disable this property page extension using
 	//	a registry value, check if it is set
-	if (ReadSettings(Hide_AllTabs))
-		return E_FAIL;	
+	if (ReadSettings(SettingType::Hide_AllTabs))
+		return E_FAIL;
 
-	TCHAR szFilename[MAX_PATH];	// Holds the filename whose properties is requested
-	HRESULT Retval = E_FAIL;	// Return value for this function
-	FORMATETC FormatEtc = {CF_HDROP, NULL, DVASPECT_CONTENT, -1L, TYMED_HGLOBAL};
-	STGMEDIUM StgMedium;		// Represents GlobalLock object
+	WCHAR szFilename[MAX_PATH];	// Holds the filename whose properties is requested
+	FORMATETC FormatEtc = { CF_HDROP, NULL, DVASPECT_CONTENT, -1L, TYMED_HGLOBAL };
+	STGMEDIUM StgMedium = { 0 };		// Represents GlobalLock object
 
 	// Retrieve data object containing the filename(s)
 	if (FAILED(pDataObj->GetData(&FormatEtc, &StgMedium)))
-		return E_FAIL;
+		return E_UNEXPECTED;
 
 	// Perform a global lock on the data object to read
-	HDROP hDropData = (HDROP) GlobalLock(StgMedium.hGlobal);
+	auto funcDropHandleReleaser = [](HDROP handle) { GlobalUnlock(handle); };
+	unique_handle<HDROP, decltype(funcDropHandleReleaser)> hDropData(HDROP(GlobalLock(StgMedium.hGlobal)),
+																	 funcDropHandleReleaser);
 	if (!hDropData)
-		GOTO_RELEASE_HANDLER(0, E_FAIL);
+		return E_OUTOFMEMORY;
 
 	// Make sure there are only one filename in the data object
-	if (DragQueryFile(hDropData, (LONG_PTR) -1, NULL, 0) != 1)
-		GOTO_RELEASE_HANDLER(1, E_NOTIMPL);
+	const UINT NUM_OF_FILENAMES_NEEDED = 1UL;
+	if (DragQueryFile(hDropData.get(), -1, NULL, 0) != NUM_OF_FILENAMES_NEEDED)
+		return E_NOTIMPL;
 
 	// Retrieve the filename and store in a local variable
-	if (!DragQueryFile(hDropData, 0, szFilename, MAX_PATH))
-		GOTO_RELEASE_HANDLER(1, E_FAIL);
+	if (!DragQueryFile(hDropData.get(), 0, szFilename, MAX_PATH))
+		return E_OUTOFMEMORY;
 
 	// Open the file with 'PEReadWrite'
-	if (!PEReaderWriter.Open(szFilename))
-		GOTO_RELEASE_HANDLER(1, E_FAIL);
+	if (!m_PEReaderWriter.open(szFilename))
+	{
+		LogError(L"ERROR: Failed to open file for reading!\n"
+				 L"Another process might have the file open without sharing read permission.", true);
 	
-	// All operations succeeded
-	GOTO_RELEASE_HANDLER(1, S_OK);
+		return E_FAIL;
+	}
 
-	// Error handlers
-	DEFINE_RELEASE_HANDLER(1, GlobalUnlock(hDropData););
-	DEFINE_RELEASE_HANDLER(0, ReleaseStgMedium(&StgMedium););
-	
-	return Retval;
+	return S_OK;
 }
 
 // We add property pages to the shell properties dialog here
 STDMETHODIMP CPEPropPageExt::AddPages(LPFNADDPROPSHEETPAGE pfnAddPage, LPARAM lParam)
 {
-	unsigned int PageCnt = 0;							// No. of pages successfully added
+	unsigned int numAddedPages = 0UL;					// No. of pages successfully added
 	PROPSHEETPAGE PropSheetPage;						// Represents current property page to be added
 	HPROPSHEETPAGE hPropSheetPage[NUM_OF_PAGES];		// Handles to all add pages
-	ZeroMemory(hPropSheetPage, sizeof(hPropSheetPage));
-	
+	ZeroMemory(hPropSheetPage, sizeof(HPROPSHEETPAGE) * NUM_OF_PAGES);
+
 	// Add new property pages to shell properties dialog
-	for	(int i = 0; i < NUM_OF_PAGES; i++)
+	for (unsigned int i = 0; i < NUM_OF_PAGES; ++i)
 	{
 		// If secondary header is not PE then no need for other tabs
-		if (PEReaderWriter.GetSecondaryHeaderType() != PEReadWrite::PEHeader &&
+		if (m_PEReaderWriter.getSecondaryHeaderType() != PEReadWrite::HeaderType::PE &&
 			PropertyPageHandler::PropertyPagesData[i].ResourceID == IDD_PROPPAGE_SECTIONS)
 			break;
 
-		// If certain data directory is not applicable, skip its tab creation
+		// If certain data directory is not applicable/disabled, skip its tab creation
 		switch (PropertyPageHandler::PropertyPagesData[i].ResourceID)
 		{
-		case IDD_PROPPAGE_MSDOSHEADER:
-			if (ReadSettings(Hide_MSDOSHeaderTab))
-				continue;
+			case IDD_PROPPAGE_MSDOSHEADER:
+				if (ReadSettings(SettingType::Hide_MSDOSHeaderTab))
+					continue;
 
-			break;
+				break;
 
-		case IDD_PROPPAGE_PEHEADERS:
-			if (ReadSettings(Hide_PEHeadersTab))
-				continue;
+			case IDD_PROPPAGE_PEHEADERS:
+				if (ReadSettings(SettingType::Hide_PEHeadersTab))
+					continue;
 
-			break;
+				break;
 
-		case IDD_PROPPAGE_SECTIONS:
-			if (ReadSettings(Hide_SectionsTab))
-				continue;
+			case IDD_PROPPAGE_SECTIONS:
+				if (ReadSettings(SettingType::Hide_SectionsTab))
+					continue;
 
-			break;
+				break;
 
-		case IDD_PROPPAGE_MANIFEST:
-			if (ReadSettings(Hide_ManifestTab))
-				continue;
+			case IDD_PROPPAGE_MANIFEST:
+				if (ReadSettings(SettingType::Hide_ManifestTab))
+					continue;
 
-			break;
+				break;
 
-		case IDD_PROPPAGE_IMPORTS:
-			if (!PEReaderWriter.HasImports() ||
-					ReadSettings(Hide_ImportsTab))
-				continue;
+			case IDD_PROPPAGE_IMPORTS:
+				if (!m_PEReaderWriter.hasImports() ||
+					ReadSettings(SettingType::Hide_ImportsTab))
+					continue;
 
-			break;
+				break;
 
-		case IDD_PROPPAGE_EXPORTS:
-			if (!PEReaderWriter.HasExports() ||
-					ReadSettings(Hide_ExportsTab))
-				continue;
+			case IDD_PROPPAGE_EXPORTS:
+				if (!m_PEReaderWriter.hasExports() ||
+					ReadSettings(SettingType::Hide_ExportsTab))
+					continue;
 
-			break;
+				break;
 
-		case IDD_PROPPAGE_RESOURCES:
-			if (!PEReaderWriter.HasResources() ||
-					ReadSettings(Hide_ResourcesTab))
-				continue;
+			case IDD_PROPPAGE_RESOURCES:
+				if (!m_PEReaderWriter.hasResources() ||
+					ReadSettings(SettingType::Hide_ResourcesTab))
+					continue;
 
-			break;
+				break;
 
-		case IDD_PROPPAGE_EXCEPTION:
-			if (!PEReaderWriter.HasExceptionHandlingData() ||
-					ReadSettings(Hide_ExceptionTab))
-				continue;
+			case IDD_PROPPAGE_EXCEPTION:
+				if (!m_PEReaderWriter.hasExceptionHandlingData() ||
+					ReadSettings(SettingType::Hide_ExceptionTab))
+					continue;
 
-			break;
+				break;
 
-		case IDD_PROPPAGE_BASERELOC:
-			if (!PEReaderWriter.HasBaseRelocationData() ||
-					ReadSettings(Hide_BaseRelocTab))
-				continue;
+			case IDD_PROPPAGE_BASERELOC:
+				if (!m_PEReaderWriter.hasBaseRelocationData() ||
+					ReadSettings(SettingType::Hide_BaseRelocTab))
+					continue;
 
-			break;
+				break;
 
-		case IDD_PROPPAGE_DEBUG:
-			if (!PEReaderWriter.HasDebugData() ||
-					ReadSettings(Hide_DebugTab))
-				continue;
+			case IDD_PROPPAGE_DEBUG:
+				if (!m_PEReaderWriter.hasDebugData() ||
+					ReadSettings(SettingType::Hide_DebugTab))
+					continue;
 
-			break;
+				break;
 
-		case IDD_PROPPAGE_TLS:
-			if (!PEReaderWriter.HasTLSData() ||
-					ReadSettings(Hide_TLSTab))
-				continue;
+			case IDD_PROPPAGE_TLS:
+				if (!m_PEReaderWriter.hasTLSData() ||
+					ReadSettings(SettingType::Hide_TLSTab))
+					continue;
 
-			break;
+				break;
 
-		case IDD_PROPPAGE_LOADCONFIG:
-			if (!PEReaderWriter.HasLoadConfigData() ||
-					ReadSettings(Hide_LoadConfigTab))
-				continue;
+			case IDD_PROPPAGE_LOADCONFIG:
+				if (!m_PEReaderWriter.hasLoadConfigData() ||
+					ReadSettings(SettingType::Hide_LoadConfigTab))
+					continue;
 
-			break;
+				break;
 
-		case IDD_PROPPAGE_CLR:
-			if (!PEReaderWriter.HasCLRData() ||
-					ReadSettings(Hide_CLRTab))
-				continue;
+			case IDD_PROPPAGE_CLR:
+				if (!m_PEReaderWriter.hasCLRData() ||
+					ReadSettings(SettingType::Hide_CLRTab))
+					continue;
 
-			break;
+				break;
 
-		case IDD_PROPPAGE_OVERVIEW:
-			if (ReadSettings(Hide_OverviewTab))
-				continue;
+			case IDD_PROPPAGE_OVERVIEW:
+				if (ReadSettings(SettingType::Hide_OverviewTab))
+					continue;
 
-			break;
+				break;
 
-		case IDD_PROPPAGE_TOOLS:
-			if (ReadSettings(Hide_ToolsTab))
-				continue;
+			case IDD_PROPPAGE_TOOLS:
+				if (ReadSettings(SettingType::Hide_ToolsTab))
+					continue;
+
+				break;
+
+			default:
+#ifdef DEBUG
+				throw exception("Unimplemented property page in 'AddPages()'.");
+#else
+				LogError(L"ERROR: Internal error. Unimplemented property page caught in '" TEXT(__FILE__) L"'.");
+				return E_FAIL;
+#endif
 		}
 
 		// Because we reuse 'PropSheetPage' in this loop
-		ZeroMemory(&PropSheetPage, sizeof(PROPSHEETPAGE));
+		ZeroMemory(&PropSheetPage, sizeof(PropSheetPage));
 
 		// Fill in details in 'PropSheetPage'
-		PropSheetPage.dwSize = sizeof(PROPSHEETPAGE);
+		PropSheetPage.dwSize = sizeof(PropSheetPage);
 		PropSheetPage.dwFlags = PSP_USETITLE | PSP_USECALLBACK | PSP_USEICONID;
-		PropSheetPage.hInstance = _AtlModule.hInstance; 
+		PropSheetPage.hInstance = g_PEPropPageExtModule.getInstance();
 		PropSheetPage.pszTemplate = MAKEINTRESOURCE(PropertyPageHandler::PropertyPagesData[i].ResourceID);
 		PropSheetPage.pszIcon = MAKEINTRESOURCE(IDI_ICONPROPPAGE);
-		PropSheetPage.pszTitle = (LPTSTR) PropertyPageHandler::PropertyPagesData[i].Pagename.c_str();
+		PropSheetPage.pszTitle = PropertyPageHandler::PropertyPagesData[i].szPagename;
 		PropSheetPage.pfnDlgProc = PropertyPagesProc;
-		PropSheetPage.lParam = (LPARAM) this;
+		PropSheetPage.lParam = LPARAM(this);
 		PropSheetPage.pfnCallback = PropertyPageLifeEventCallback;
 		PropSheetPage.pcRefParent = NULL;
 
@@ -235,240 +286,317 @@ STDMETHODIMP CPEPropPageExt::AddPages(LPFNADDPROPSHEETPAGE pfnAddPage, LPARAM lP
 		this->AddRef();
 
 		// Keep count of successful property page additions
-		PageCnt++;
+		++numAddedPages;
 	}
 
 	// Check if not all of the property pages were added
-	if (PageCnt == 0)
+	if (numAddedPages == 0)
 		return E_FAIL;		// No property page was added so fail
 
 	// Continue with all of the successful property page additions
 	return S_OK;
 }
 
-UINT CALLBACK CPEPropPageExt::PropertyPageLifeEventCallback(HWND hWnd, UINT uMsg, LPPROPSHEETPAGE ppsp)
+UINT CALLBACK CPEPropPageExt::PropertyPageLifeEventCallback(HWND hWnd,
+															UINT uMsg,
+															LPPROPSHEETPAGE ppsp)
 {
-	CPEPropPageExt *pPEPropPageExt = reinterpret_cast<CPEPropPageExt *>(ppsp->lParam);
-
-	if (pPEPropPageExt)
+	switch (uMsg)
 	{
-		switch(uMsg)
-		{
 		case PSPCB_CREATE:
-				return TRUE;	// Must return TRUE to enable the page to be created
+			return TRUE;	// Must return TRUE to enable the page to be created
 
 		case PSPCB_RELEASE:
-			{
-				// When the callback function receives the PSPCB_RELEASE notification, 
-				// the ppsp parameter of the PropSheetPageProc contains a pointer to 
-				// the PROPSHEETPAGE structure. The lParam member of the PROPSHEETPAGE 
-				// structure contains the extension pointer which can be used to 
-				// release the object.
+		{
+			// When the callback function receives the PSPCB_RELEASE notification, 
+			// the 'ppsp' parameter of the 'PropSheetPageProc' contains a pointer to 
+			// the 'PROPSHEETPAGE' structure. The 'lParam' member of the 'PROPSHEETPAGE' 
+			// structure contains the extension pointer which can be used to 
+			// release the object.
 
-				// Release the property sheet extension object. This is called even 
-				// if the property page was never actually displayed.
+			// Release the property sheet extension object. This is called even 
+			// if the property page was never actually displayed.
+			CPEPropPageExt *pPEPropPageExt = reinterpret_cast<CPEPropPageExt *>(ppsp->lParam);
+
+			if (pPEPropPageExt)
 				pPEPropPageExt->Release();
-			}
-
-			break;
 		}
 	}
 
-    return FALSE;
+	return FALSE;
 }
 
 // Windows message handler for our property pages
-INT_PTR CALLBACK CPEPropPageExt::PropertyPagesProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
+INT_PTR CALLBACK CPEPropPageExt::PropertyPagesProc(HWND hWnd,
+												   UINT uMsg,
+												   WPARAM wParam,
+												   LPARAM lParam)
 {
-	PropertyPageHandler *pPropertyPageHandler = NULL;
+	PropertyPageHandler *pPropertyPageHandler;
 
 	// Determine the window message and handle it
 	if (uMsg == WM_INITDIALOG)	// Called once for every property page that is created
-	// NOTE: 'hWnd' value is different for each property page creation
+		// NOTE: 'hWnd' value is different for each property page creation
 	{
 		// Get current cursor
 		HCURSOR hCurrentCursor = GetCursor();
 
 		// Load and show busy cursor
-		HICON hBusyCursor = LoadCursor(NULL, IDC_WAIT);
-		SetCursor(hBusyCursor);
+		auto BusyCursorReleaser = [&](HCURSOR handle)
+		{
+			// Restore last cursor
+			if (hCurrentCursor != NULL)
+				SetCursor(hCurrentCursor);
+
+			// Destroy loaded system cursor
+			if (handle != NULL)
+				DestroyCursor(handle);
+		};
+		unique_handle<HCURSOR, decltype(BusyCursorReleaser)> hBusyCursor(LoadCursor(NULL, IDC_WAIT),
+																		 BusyCursorReleaser);
+
+		if (hBusyCursor.get())
+			SetCursor(hBusyCursor.get());
 
 		// Get reference to 'PEReadWrite' object
-		PEReadWrite& PEReaderWriter = reinterpret_cast<CPEPropPageExt *>(reinterpret_cast<LPPROPSHEETPAGE>(lParam)->lParam)->PEReaderWriter;
+		PEReadWrite& PEReaderWriter = reinterpret_cast<CPEPropPageExt *>(LPPROPSHEETPAGE(lParam)->lParam)->m_PEReaderWriter;
 
 		// Determine the property page's dialog resource ID
-		int DialogResourceID = (int) reinterpret_cast<LPPROPSHEETPAGE>(lParam)->pszTemplate;
+		int DialogResourceID = int(LPPROPSHEETPAGE(lParam)->pszTemplate);
 
 		// Create a new handler for this property page
 		switch (DialogResourceID)
 		{
-		case IDD_PROPPAGE_MSDOSHEADER:
-			pPropertyPageHandler = new PropertyPageHandler_MSDOSHeader(hWnd, PEReaderWriter);
+			case IDD_PROPPAGE_MSDOSHEADER:
+				pPropertyPageHandler = new PropertyPageHandler_MSDOSHeader(hWnd, std::ref(PEReaderWriter));
 
-			break;
+				break;
 
-		case IDD_PROPPAGE_PEHEADERS:
-			pPropertyPageHandler = new PropertyPageHandler_PEHeaders(hWnd, PEReaderWriter);
+			case IDD_PROPPAGE_PEHEADERS:
+				pPropertyPageHandler = new PropertyPageHandler_PEHeaders(hWnd, std::ref(PEReaderWriter));
 
-			break;
+				break;
 
-		case IDD_PROPPAGE_SECTIONS:
-			pPropertyPageHandler = new PropertyPageHandler_Sections(hWnd, PEReaderWriter);
+			case IDD_PROPPAGE_SECTIONS:
+				pPropertyPageHandler = new PropertyPageHandler_Sections(hWnd, std::ref(PEReaderWriter));
 
-			break;
+				break;
 
-		case IDD_PROPPAGE_MANIFEST:
-			pPropertyPageHandler = new PropertyPageHandler_Manifest(hWnd, PEReaderWriter);
+			case IDD_PROPPAGE_MANIFEST:
+				pPropertyPageHandler = new PropertyPageHandler_Manifest(hWnd, std::ref(PEReaderWriter));
 
-			break;
+				break;
 
-		case IDD_PROPPAGE_IMPORTS:
-			pPropertyPageHandler = new PropertyPageHandler_Imports(hWnd, PEReaderWriter);
+			case IDD_PROPPAGE_IMPORTS:
+				pPropertyPageHandler = new PropertyPageHandler_Imports(hWnd, std::ref(PEReaderWriter));
 
-			break;
+				break;
 
-		case IDD_PROPPAGE_EXPORTS:
-			pPropertyPageHandler = new PropertyPageHandler_Exports(hWnd, PEReaderWriter);
+			case IDD_PROPPAGE_EXPORTS:
+				pPropertyPageHandler = new PropertyPageHandler_Exports(hWnd, std::ref(PEReaderWriter));
 
-			break;
+				break;
 
-		case IDD_PROPPAGE_RESOURCES:
-			pPropertyPageHandler = new PropertyPageHandler_Resources(hWnd, PEReaderWriter);
+			case IDD_PROPPAGE_RESOURCES:
+				pPropertyPageHandler = new PropertyPageHandler_Resources(hWnd, std::ref(PEReaderWriter));
 
-			break;
+				break;
 
-		case IDD_PROPPAGE_EXCEPTION:
-			pPropertyPageHandler = new PropertyPageHandler_ExceptionHandling(hWnd, PEReaderWriter);
+			case IDD_PROPPAGE_EXCEPTION:
+				pPropertyPageHandler = new PropertyPageHandler_ExceptionHandling(hWnd, std::ref(PEReaderWriter));
 
-			break;
+				break;
 
-		case IDD_PROPPAGE_BASERELOC:
-			pPropertyPageHandler = new PropertyPageHandler_BaseReloc(hWnd, PEReaderWriter);
+			case IDD_PROPPAGE_BASERELOC:
+				pPropertyPageHandler = new PropertyPageHandler_BaseReloc(hWnd, std::ref(PEReaderWriter));
 
-			break;
+				break;
 
-		case IDD_PROPPAGE_DEBUG:
-			pPropertyPageHandler = new PropertyPageHandler_Debug(hWnd, PEReaderWriter);
+			case IDD_PROPPAGE_DEBUG:
+				pPropertyPageHandler = new PropertyPageHandler_Debug(hWnd, std::ref(PEReaderWriter));
 
-			break;
+				break;
 
-		case IDD_PROPPAGE_TLS:
-			pPropertyPageHandler = new PropertyPageHandler_TLS(hWnd, PEReaderWriter);
+			case IDD_PROPPAGE_TLS:
+				pPropertyPageHandler = new PropertyPageHandler_TLS(hWnd, std::ref(PEReaderWriter));
 
-			break;
+				break;
 
-		case IDD_PROPPAGE_LOADCONFIG:
-			pPropertyPageHandler = new PropertyPageHandler_LoadConfiguration(hWnd, PEReaderWriter);
+			case IDD_PROPPAGE_LOADCONFIG:
+				pPropertyPageHandler = new PropertyPageHandler_LoadConfiguration(hWnd, std::ref(PEReaderWriter));
 
-			break;
+				break;
 
-		case IDD_PROPPAGE_CLR:
-			pPropertyPageHandler = new PropertyPageHandler_CLR(hWnd, PEReaderWriter);
+			case IDD_PROPPAGE_CLR:
+				pPropertyPageHandler = new PropertyPageHandler_CLR(hWnd, std::ref(PEReaderWriter));
 
-			break;
+				break;
 
-		case IDD_PROPPAGE_OVERVIEW:
-			pPropertyPageHandler = new PropertyPageHandler_Overview(hWnd, PEReaderWriter);
+			case IDD_PROPPAGE_OVERVIEW:
+				pPropertyPageHandler = new PropertyPageHandler_Overview(hWnd, std::ref(PEReaderWriter));
 
-			break;
+				break;
 
-		case IDD_PROPPAGE_TOOLS:
-			pPropertyPageHandler = new PropertyPageHandler_Tools(hWnd, PEReaderWriter);
+			case IDD_PROPPAGE_TOOLS:
+				pPropertyPageHandler = new PropertyPageHandler_Tools(hWnd, std::ref(PEReaderWriter));
 
-			break;
+				break;
 
-	#ifdef DEBUG
-		default:
-			// If this error occurs, it must be caught and fixed
-			//	before shipping the software
-			throw std::exception("Unimplemented property sheet caught in 'PropertyPageHandler.cpp'");
-	#endif
+			default:
+#ifdef DEBUG
+				// If this error occurs, it must be caught and fixed
+				//	before shipping the software
+				throw std::exception("Unimplemented property sheet caught in file " __FILE__ " at line " STRINGIFY(__LINE__) ".");
+#else
+				LogError(L"Unimplemented property sheet caught in file " TEXT(__FILE__) L" at line " TEXT(STRINGIFY(__LINE__)) L".", true);
+				return FALSE;
+#endif
+		}
+
+		// If object allocation in heap failed, fail this page initialization
+		if (!pPropertyPageHandler)
+		{
+			LogError(L"ERROR: Low memory! Failed to initialize property page.", true);
+			return FALSE;
 		}
 
 		// Put the pointer of property page in the page window's user data section
-		SetWindowLongPtr(hWnd, GWLP_USERDATA, (LONG_PTR) pPropertyPageHandler);
+		// CAUTION: When 'SetWindowLongPtr()' is used with 'GWLP_USERDATA', the return value
+		// is the last value stored and not an indication of error. To check if the call was
+		// successful, check the last error for this thread as shown below.
+		SetLastError(0);
+		SetWindowLongPtr(hWnd, GWLP_USERDATA, LONG_PTR(pPropertyPageHandler));
+		if (GetLastError() != 0)
+		{
+			LogError(L"ERROR: Sytem error. Couldn't put property handler pointer in window's user data storage. Restart Explorer.", true);
+			return FALSE;
+		}
 
-		// Call property page handler for this page
-		pPropertyPageHandler->OnInitDialog();
+		// Call 'OnInitDialog()' handler for this page
+		try
+		{
+			pPropertyPageHandler->OnInitDialog();
+		}
+		catch (WCHAR *e)
+		{
+			LogError(e, true);
+		}
+		catch (...)
+		{
+			LogError(L"ERROR: Unexpected internal error occurred in file " TEXT(__FILE__) L" at line " + DWORD_toString(__LINE__) + L".", true);
+		}
 
-		// Restore last cursor
-		SetCursor(hCurrentCursor);
-
-		// Destroy loaded system cursor
-		DestroyCursor(hBusyCursor);
+		// Return 'TRUE' to allow system to set keyboard focus to this window
+		return TRUE;
 	}
 	else
 	{
 		// Get the property page handler object for the current page
-		pPropertyPageHandler = (PropertyPageHandler *) GetWindowLongPtr(hWnd, GWLP_USERDATA);
+		pPropertyPageHandler = reinterpret_cast<PropertyPageHandler *>(GetWindowLongPtr(hWnd, GWLP_USERDATA));
 
 		if (pPropertyPageHandler)
 		{
-			switch (uMsg)
+			try
 			{
-			case WM_SHOWWINDOW:
-				if (wParam == TRUE)
-					pPropertyPageHandler->OnShowWindow();
-
-				break;
-
-			case WM_PAINT:
+				switch (uMsg)
 				{
-					PAINTSTRUCT ps;
+					case WM_SHOWWINDOW:
+						if (wParam == TRUE)
+							pPropertyPageHandler->OnShowWindow();
+						else
+							pPropertyPageHandler->OnHideWindow();
 
-					HDC hdc = BeginPaint(hWnd, &ps);
-					pPropertyPageHandler->OnPaint(ps.hdc, ps.rcPaint);
-					EndPaint(hWnd, &ps);
-				}
+						break;
 
-				break;
+					case WM_PAINT:
+					{
+						PAINTSTRUCT ps;
 
-			case WM_SIZE:	// Called just once for sizing and positioning controls because
-							//	property pages usually don't have resize ability
-				pPropertyPageHandler->OnSize(wParam, lParam);
-			
-				break;
+						if (BeginPaint(hWnd, &ps))
+						{
+							pPropertyPageHandler->OnPaint(ps.hdc, ps.rcPaint);
+							EndPaint(hWnd, &ps);
+						}
 
-			case WM_DESTROY:	// Called for each page when the main shell property window closes
-				pPropertyPageHandler->OnDestroy();
-				SAFE_RELEASE(pPropertyPageHandler);
-				SetWindowLongPtr(hWnd, GWLP_USERDATA, (LONG_PTR) NULL);
+						break;
+					}
 
-				break;
+					case WM_SIZE:	// Called just once for sizing and positioning controls because
+						//	property pages usually don't have resize ability
+						pPropertyPageHandler->OnSize(wParam, lParam);
 
-			case WM_COMMAND:	// Called for command button clicks
-				pPropertyPageHandler->OnCommand(HIWORD(wParam), LOWORD(wParam), (HWND) lParam);
+						break;
 
-				break;
+					case WM_DESTROY:	// Called for each page when the main shell property window closes
+						pPropertyPageHandler->OnDestroy();
+						SAFE_RELEASE(pPropertyPageHandler);
+						SetWindowLongPtr(hWnd, GWLP_USERDATA, LONG_PTR(NULL));
 
-			case WM_NOTIFY:
-				{
-					// Notification details object pointer
-					NMHDR *pHdr = (NMHDR *) lParam;
+						break;
 
-					// Redirect notification information to property page handlers
-					pPropertyPageHandler->OnNotify(pHdr->code, pHdr->idFrom, pHdr->hwndFrom, lParam);
+					case WM_COMMAND:	// Called for command button clicks
+						pPropertyPageHandler->OnCommand(HIWORD(wParam), LOWORD(wParam), HWND(lParam));
+
+						break;
+
+					case WM_NOTIFY:
+					{
+						// Notification details object pointer
+						LPNMHDR pHdr = LPNMHDR(lParam);
+
+						if (!pHdr)
+							return 0;
+
+						switch (pHdr->code)
+						{
+							case PSN_APPLY:				// 'Apply' button pressed
+							case PSN_SETACTIVE:			// A property page about to be activated
+								return PSNRET_NOERROR;	// Allow it
+						}
+
+						// Redirect notification information to property page handlers
+						pPropertyPageHandler->OnNotify(pHdr->code, pHdr->idFrom, pHdr->hwndFrom, lParam);
+					}
+					break;
+
+					case WM_CTLCOLORSTATIC:
+					{
+						// This message is used to make the background of static label control transparent
+						HBRUSH hBrush = pPropertyPageHandler->OnControlColorStatic(HDC(wParam), HWND(lParam));
+
+						if (hBrush)
+							return INT_PTR(hBrush); // Return the brush
+						
+						// Else, let default window procedure handle it
+					}
+					break;
+
+					case WM_CTLCOLORBTN:
+					{
+						// This message is used to make the background of checkboxes transparent
+						HBRUSH hBrush = pPropertyPageHandler->OnControlColorButton(HDC(wParam), HWND(lParam));
+
+						if (hBrush)
+							return INT_PTR(hBrush); // Return the brush
+						
+						// Else, let default window procedure handle it
+					}
+					break;
 				}
 			}
-		}
-	}
-
-	if (uMsg == WM_NOTIFY)
-	{
-		// Notification details object pointer
-		NMHDR *pHdr = (NMHDR *) lParam;
-
-		// Determine if the notification is for user clicking 'Apply' on main dialog
-		switch (pHdr->code)
-		{
-		case PSN_APPLY:				// 'Apply' button pressed
-		case PSN_SETACTIVE:			// A property page about to be activated
-			return PSNRET_NOERROR;	// Allow it
+			catch (LPWSTR e)
+			{
+				LogError(e, true);
+			}
+			catch (...)
+			{
+				LogError(L"ERROR: Unexpected internal error occurred in file " TEXT(__FILE__) L" at line "  + DWORD_toString(__LINE__) + L".", true);
+			}
 		}
 	}
 
 	// Nearly all window messages require that we return zero.
 	// For message that require otherwise, it is done so in cases
 	// for 'switch' statements above.
-	return 0;
+	return DefWindowProc(hWnd, uMsg, wParam, lParam);
 }

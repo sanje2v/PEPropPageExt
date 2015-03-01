@@ -1,60 +1,55 @@
-// dllmain.cpp : Implementation of DllMain.
-
 #include "stdafx.h"
-#include "resource.h"
-#include "PEPropPageExt_i.h"
-#include "dllmain.h"
 
-CPEPropPageExtModule _AtlModule;
+
+// Module object from 'CPEPropPageExtModule' class
+CPEPropPageExtModule g_PEPropPageExtModule;
 
 // DLL Entry Point
-extern "C" BOOL WINAPI DllMain(HINSTANCE hInstance, DWORD dwReason, LPVOID lpReserved)
+BOOL APIENTRY DllMain(HINSTANCE hInstance, DWORD dwReason, LPVOID pReserved)
 {
-	_AtlModule.hInstance = hInstance;
+	switch (dwReason)
+	{
+		case DLL_PROCESS_ATTACH:
+			g_PEPropPageExtModule.setInstance(hInstance);
+			DisableThreadLibraryCalls(hInstance);
 
-	if (dwReason == DLL_PROCESS_ATTACH)
-		DisableThreadLibraryCalls(hInstance);
+			break;
+	}
 
-	return _AtlModule.DllMain(dwReason, lpReserved); 
+	return g_PEPropPageExtModule.DllMain(dwReason, pReserved);
 }
 
-// Used to determine whether the DLL can be unloaded by OLE.
-STDAPI DllCanUnloadNow(void)
+STDAPI DllCanUnloadNow()
 {
-	return _AtlModule.DllCanUnloadNow();
+	return g_PEPropPageExtModule.DllCanUnloadNow();
 }
 
-// Returns a class factory to create an object of the requested type.
 STDAPI DllGetClassObject(REFCLSID rclsid, REFIID riid, LPVOID* ppv)
 {
-	return _AtlModule.DllGetClassObject(rclsid, riid, ppv);
+	return g_PEPropPageExtModule.DllGetClassObject(rclsid, riid, ppv);
 }
 
-// DllRegisterServer - Adds entries to the system registry.
-STDAPI DllRegisterServer(void)
+STDAPI DllRegisterServer()
 {
-	// registers object, typelib and all interfaces in typelib
-	return _AtlModule.DllRegisterServer();
+	return g_PEPropPageExtModule.DllRegisterServer(FALSE);
 }
 
-// DllUnregisterServer - Removes entries from the system registry.
-STDAPI DllUnregisterServer(void)
+STDAPI DllUnregisterServer()
 {
-	return _AtlModule.DllUnregisterServer();
+	return g_PEPropPageExtModule.DllUnregisterServer(FALSE);
 }
 
-// DllInstall - Adds/Removes entries to the system registry per user per machine.
 STDAPI DllInstall(BOOL bInstall, LPCWSTR pszCmdLine)
 {
 	HRESULT hr = E_FAIL;
 	static const wchar_t szUserSwitch[] = L"user";
 
 	if (pszCmdLine != NULL)
-		if (_wcsnicmp(pszCmdLine, szUserSwitch, _countof(szUserSwitch)) == 0)
-			ATL::AtlSetPerUserRegistration(true);
+		if (_wcsnicmp(pszCmdLine, szUserSwitch, ARRAYSIZE(szUserSwitch)) == 0)
+			AtlSetPerUserRegistration(true);
 
 	if (bInstall)
-	{	
+	{
 		hr = DllRegisterServer();
 
 		if (FAILED(hr))

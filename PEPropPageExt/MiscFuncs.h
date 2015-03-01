@@ -1,52 +1,51 @@
 #pragma once
 
 #include "stdafx.h"
-#include "CommonDefs.h"
-#include <Windows.h>
 #include <string>
+#include <algorithm>
 
 
-using namespace std;
+enum FORMATTYPE { Decimal, Hexadecimal };
 
-
-enum FORMATTYPE {Decimal, Hexadecimal};
-
-void LogError(tstring info, bool bCritical = false);
-void tstring_ReplaceAll(tstring& source, TCHAR strtofind, TCHAR strtoreplace);
-tstring Integer_toString(int value);
-tstring DWORD_toString(DWORD, FORMATTYPE = Decimal);
-tstring QWORD_toString(ULONGLONG, FORMATTYPE = Decimal);
-tstring Signature_toString(DWORD);
-tstring float_toString(float);
-LPTSTR LEOrdering_toString(BYTE);
-LPTSTR LECPUtype_toString(WORD);
-LPTSTR LEOStype_toString(WORD);
-tstring LEModuletypeflags_toString(DWORD);
-tstring VersionNums_toString(WORD, WORD);
-tstring MagicNum_toString(DWORD);
-tstring OSIdString(WORD, WORD);
-tstring FormattedBytesSize(ULONGLONG);
-tstring MachineType_toString(WORD);
-tstring ImageCharacteristics_toString(DWORD);
-tstring SubsystemID_toString(WORD);
-tstring DllCharacteristics_toString(WORD);
-tstring ProperSectionName(BYTE [IMAGE_SIZEOF_SHORT_NAME]);
-tstring SectionCharacteristics_toString(DWORD);
-tstring StandardSectionNameAnnotation(tstring);
-tstring ExceptionArch_toString(DWORD);
-tstring ExceptionFlag_toString(DWORD);
-tstring LCIDtoLangName(WORD);
-tstring MultiByte_toString(const char *, bool = true, int = -1);
-tstring MultiByte_toString(string &);
-tstring TimeDateStamp_toString(DWORD);
-tstring GUID_toString(GUID&);
-tstring DebugType_toString(DWORD);
-tstring DebugMiscDataType_toString(DWORD);
-tstring ProcessorAffinityMask_toString(ULONGLONG);
-tstring HeapFlags_toString(DWORD);
-tstring CorImageFlags_toString(DWORD);
-tstring CorHeapSizes_toString(BYTE);
-tstring CorMetadataTablesSummary_toString(ULONGLONG, ULONGLONG, DWORD *);
-tstring CorGUIDs_toString(BYTE *, DWORD);
-tstring CorVTableFlags_toString(USHORT);
-tstring BaseRelocType_toString(WORD);
+void LogError(std::wstring info, bool bCritical = false);
+void wstring_ReplaceAll(wstring& source, WCHAR strtofind, WCHAR strtoreplace);
+wstring Integer_toString(int value);
+wstring BYTE_toString(BYTE, FORMATTYPE type = Decimal, bool fixedaligned = false, bool prefix = true);
+wstring WORD_toString(WORD, FORMATTYPE type = Decimal, bool fixedaligned = false, bool prefix = true);
+wstring DWORD_toString(DWORD, FORMATTYPE type = Decimal, bool fixedaligned = false, bool prefix = true);
+wstring QWORD_toString(ULONGLONG, FORMATTYPE type = Decimal, bool fixedaligned = false, bool prefix = true);
+wstring Signature_toString(DWORD);
+wstring float_toString(float);
+LPWSTR LEOrdering_toString(BYTE);
+LPWSTR LECPUtype_toString(WORD);
+LPWSTR LEOStype_toString(WORD);
+wstring LEModuletypeflags_toString(DWORD);
+wstring VersionNums_toString(WORD, WORD);
+wstring MagicNum_toString(DWORD);
+wstring OSId_toString(WORD, WORD);
+wstring FormattedBytesSize(ULONGLONG);
+wstring MachineType_toString(WORD);
+wstring ImageCharacteristics_toString(DWORD);
+wstring SubsystemID_toString(WORD);
+wstring DllCharacteristics_toString(WORD);
+wstring ProperSectionName(BYTE [IMAGE_SIZEOF_SHORT_NAME]);
+wstring SectionCharacteristics_toString(DWORD);
+wstring StandardSectionNameAnnotation(wstring);
+wstring ExceptionArch_toString(DWORD);
+wstring ExceptionFlag_toString(DWORD);
+wstring LCID_toLocaleName(WORD);
+wstring MultiByte_toString(const char *pszdata, bool bisANSI = true, int datasize = -1);
+wstring MultiByte_toString(string &);
+wstring TimeDateStamp_toString(DWORD);
+wstring GUID_toString(GUID&);
+wstring DebugType_toString(DWORD);
+wstring DebugMiscDataType_toString(DWORD);
+wstring ProcessorAffinityMask_toString(ULONGLONG);
+wstring HeapFlags_toString(DWORD);
+wstring CorImageFlags_toString(DWORD);
+wstring CorHeapSizes_toString(BYTE);
+wstring CorMetadataTablesSummary_toString(ULONGLONG, ULONGLONG, DWORD *);
+wstring CorGUIDs_toString(BYTE *, DWORD);
+wstring CorVTableType_toString(USHORT);
+wstring BaseRelocType_toString(WORD);
+wstring ResourceID_toString(WORD);

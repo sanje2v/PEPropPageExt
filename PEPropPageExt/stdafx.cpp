@@ -1,5 +1,4 @@
-// stdafx.cpp : source file that includes just the standard includes
-// PEPropPageExt.pch will be the pre-compiled header
-// stdafx.obj will contain the pre-compiled type information
-
 #include "stdafx.h"
+
+const CLSID CLSID_PEPropPageExt =
+{ 0x8c762f3e, 0x2463, 0x4012, { 0xb5, 0x4f, 0xeb, 0xd3, 0xfc, 0xf8, 0x95, 0x63 } };

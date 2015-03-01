@@ -2,82 +2,226 @@
 
 #include "stdafx.h"
 #include "PEReadWrite.h"
-#include "udis86.h"
+#include "ManagedFuncs.h"
 #include "MiscFuncs.h"
-#include "resource.h"
 #include "SimpleLayoutManager.h"
+#include "CWindow.h"
 #include "RTTI.h"
 #include <vector>
+#include <stack>
 #include <string>
-#include <Windows.h>
 #include <WindowsX.h>
 #include <commctrl.h>
 #include <Richedit.h>
 #include <GdiPlus.h>
 
-
-using namespace std;
-using namespace Gdiplus;
-
 // Defines and macros
-#define NUM_OF_PAGES				15	// Current no. of page implemented
-// The following macro is used to conveniently put data in a 'FillData' struct object
-#define FillData(vectorobj, ...)	(vectorobj).push_back(PropertyPageHandler::TextAndData(__VA_ARGS__))
+#define NUM_OF_PAGES				15UL	// Current no. of page implemented
 
-extern THREAD_ISOLATED_STORAGE HMENU hGenericContextMenu;
 
-enum SortOrder { None, Ascending, Descending };
-
+extern HMENU g_hGenericContextMenu;
 
 // 'PropertyPageHandler' class that handles page specific things
 class PropertyPageHandler abstract
 {
 protected:
+	enum class SortOrder { None, Ascending, Descending };
+
+	static const LPWSTR szPreferredFont;
+	static const DWORD cTabs = 100;
+
+	typedef struct CompareFuncParam
+	{
+		HWND hListView;
+		int iColumn;
+		SortOrder Order;
+	} *pCompareFuncParam;
+
+	static int CALLBACK funcStringSort(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort)
+	{
+		pCompareFuncParam pParams = pCompareFuncParam(lParamSort);
+		WCHAR szBuffer1[1024], szBuffer2[1024];
+
+		ListView_GetItemText(pParams->hListView, lParam1, pParams->iColumn, szBuffer1, ARRAYSIZE(szBuffer1));
+		ListView_GetItemText(pParams->hListView, lParam2, pParams->iColumn, szBuffer2, ARRAYSIZE(szBuffer2));
+
+		if (pParams->Order == SortOrder::Ascending)
+			return _wcsicmp(szBuffer1, szBuffer2);
+		else
+			return _wcsicmp(szBuffer2, szBuffer1);
+	};
+	static int CALLBACK funcNumberSort(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort)
+	{
+		pCompareFuncParam pParams = pCompareFuncParam(lParamSort);
+		WCHAR szBuffer1[1024], szBuffer2[1024];
+
+		ListView_GetItemText(pParams->hListView, lParam1, pParams->iColumn, szBuffer1, ARRAYSIZE(szBuffer1));
+		ListView_GetItemText(pParams->hListView, lParam2, pParams->iColumn, szBuffer2, ARRAYSIZE(szBuffer2));
+
+		if (wcslen(szBuffer1) == 0)
+			return -1;
+		else if (wcslen(szBuffer2) == 0)
+			return 1;
+
+		int iBuffer1 = _wtoi(szBuffer1), iBuffer2 = _wtoi(szBuffer2);
+		if (pParams->Order == SortOrder::Ascending)
+			return (iBuffer1 == iBuffer2 ? 0 : (iBuffer1 < iBuffer2 ? -1 : 1));
+		else
+			return (iBuffer1 == iBuffer2 ? 0 : (iBuffer1 > iBuffer2 ? -1 : 1));
+	};
+	static int CALLBACK funcHexNumberSort(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort)
+	{
+		pCompareFuncParam pParams = pCompareFuncParam(lParamSort);
+		WCHAR szBuffer1[1024], szBuffer2[1024];
+
+		ListView_GetItemText(pParams->hListView, lParam1, pParams->iColumn, szBuffer1, ARRAYSIZE(szBuffer1));
+		ListView_GetItemText(pParams->hListView, lParam2, pParams->iColumn, szBuffer2, ARRAYSIZE(szBuffer2));
+
+		if (wcslen(szBuffer1) == 0)
+			return -1;
+		else if (wcslen(szBuffer2) == 0)
+			return 1;
+
+		int iBuffer1 = wcstol(szBuffer1, NULL, 16), iBuffer2 = wcstol(szBuffer2, NULL, 16);
+
+		if (pParams->Order == SortOrder::Ascending)
+			return (iBuffer1 == iBuffer2 ? 0 : (iBuffer1 < iBuffer2 ? -1 : 1));
+		else
+			return (iBuffer1 == iBuffer2 ? 0 : (iBuffer1 > iBuffer2 ? -1 : 1));
+	};
+
 	HWND m_hWnd;
-	unique_ptr<SimpleLayoutManager> m_pLayoutManager;
-	PEReadWrite m_PEReaderWriter;
+	SimpleLayoutManager m_LayoutManager;
+	PEReadWrite& m_PEReaderWriter;
 
 	// 'TextAndData' struct used to hold generic list view description, data and annotation
 	struct TextAndData
 	{
-		tstring szText;
-		tstring szData;
-		tstring szComments;
-
-		TextAndData(tstring sztext,
-					tstring szdata,
-					tstring szcomments = _T(""))
-			: szText(sztext), szData(szdata), szComments(szcomments) { }
+		wstring Text;
+		wstring Data;
+		wstring Comments;
 	};
 
 	struct PropertyPageData
 	{
 		int ResourceID;
-		tstring Pagename;
+		const LPWSTR szPagename;
 	} *pPropertyPageData;
 
-	tstring Generic_OnGetTooltip(vector<RTTI::GenericTooltip>& TooltipInfo, int Index);
+	wstring Generic_OnGetTooltip(vector<RTTI::GenericTooltip>& TooltipInfo, int Index)
+	{
+		return TooltipInfo[Index].FullName +
+				L"\nType: " + TooltipInfo[Index].Type +
+				L"\nSize: " + TooltipInfo[Index].Size +
+				L"\nFile offset: " + TooltipInfo[Index].FileOffset;
+	}
+
 	void Generic_OnContextMenu(vector<RTTI::GenericTooltip>& TooltipInfo,
-								vector<PropertyPageHandler::TextAndData>& ItemsInfo,
-								LONG x, LONG y, int Index);
+							   vector<PropertyPageHandler::TextAndData>& ItemsInfo,
+							   LONG x,
+							   LONG y,
+							   int Index)
+	{
+		if (!OpenClipboard(m_hWnd))
+			return;
+
+		HMENU hContextMenu = GetSubMenu(g_hGenericContextMenu, 0);	// Must select first subitem for context menu to work
+		wstring Data;
+
+		switch (TrackPopupMenu(hContextMenu,
+								TPM_NONOTIFY | TPM_RETURNCMD,
+								x,
+								y,
+								0,
+								m_hWnd,
+								NULL))
+		{
+			case ID_COPYVALUE:
+				Data = ItemsInfo[Index].Data;
+
+				break;
+
+			case ID_COPYANNOTATION:
+				Data = ItemsInfo[Index].Comments;
+
+				break;
+
+			case ID_COPYVARIABLEFULLNAME:
+				Data = TooltipInfo[Index].FullName;
+
+				break;
+
+			case ID_COPYFILEOFFSET:
+				Data = TooltipInfo[Index].FileOffset;
+
+				break;
+
+			default:
+				CloseClipboard();
+
+				return;
+		}
+
+		// Allocate global memory object
+		HGLOBAL hGlobalData = GlobalAlloc(GMEM_MOVEABLE, sizeof(WCHAR) * (Data.size() + 1));
+		if (hGlobalData)
+		{
+			LPVOID pGlobalData = GlobalLock(hGlobalData);
+
+			if (!pGlobalData)
+			{
+				GlobalFree(hGlobalData);
+				CloseClipboard();
+
+				return;
+			}
+
+			CopyMemory(pGlobalData, Data.c_str(), sizeof(WCHAR) * (Data.size() + 1));
+			GlobalUnlock(hGlobalData);
+
+			EmptyClipboard();
+
+			SetClipboardData(CF_UNICODETEXT, hGlobalData);
+		}
+
+		CloseClipboard();
+	}
 
 public:
-	static wchar_t * const GenericColumnText[3];
+	static wchar_t *const szGenericColumnText[3];
 	static const PropertyPageData PropertyPagesData[];
 
 	PropertyPageHandler(HWND hWnd, PEReadWrite& PEReaderWriter)
-		: m_hWnd(hWnd),
-			m_PEReaderWriter(PEReaderWriter),
-			m_pLayoutManager(new SimpleLayoutManager(hWnd)) {}
+		:	m_hWnd(hWnd),
+			m_PEReaderWriter(std::ref(PEReaderWriter)),
+			m_LayoutManager(hWnd) {}
 	virtual void OnInitDialog() {}
 	virtual void OnShowWindow() {}
+	virtual void OnHideWindow() {}
 	virtual void OnPaint(HDC hdc, const RECT& rectUpdate) {}
-	void OnSize(WPARAM wParam, LPARAM lParam);
+	void OnSize(WPARAM wParam, LPARAM lParam)
+	{
+		// When notified about page resize ask layout manager to do so
+		m_LayoutManager.DoLayout(wParam, lParam);
+	}
 	virtual void OnCommand(WORD NotificationCode, WORD ControlID, HWND hControl) {}
 	virtual void OnNotify(UINT NotificationCode, UINT_PTR ControlID, HWND hControl, LPARAM lParam) {}
-	virtual HBRUSH OnControlColorEdit(HWND hControl, HDC hdc) { return NULL; }
+	virtual HBRUSH OnControlColorStatic(HDC hDC, HWND hControl)
+	{
+		// NOTE: The following is needed to make static control background transparent
+		// CAUTION: Disabled edit control will also have this message called. The default
+		// window procedure must handle this message for those controls. So return 'NULL' for them.
+		SetBkMode(hDC, TRANSPARENT);
+		return HBRUSH(GetStockObject(NULL_BRUSH));
+	}
+	virtual HBRUSH OnControlColorButton(HDC hDC, HWND hControl)
+	{
+		// NOTE: The following is need to make checkboxes control background transparent
+		return NULL;
+	}
 	virtual void OnDestroy() {}
 };
+
 
 // For MSDOS Header page
 class PropertyPageHandler_MSDOSHeader : public PropertyPageHandler
@@ -89,7 +233,7 @@ private:
 	vector<RTTI::GenericTooltip> m_TooltipInfo;
 	vector<PropertyPageHandler::TextAndData> m_ItemsInfo;
 
-	tstring lstMSDOSHeader_OnGetTooltip(int Index);
+	wstring lstMSDOSHeader_OnGetTooltip(int Index);
 	void lstMSDOSHeader_OnContextMenu(LONG x, LONG y, int Index);
 
 public:
@@ -111,8 +255,8 @@ private:
 	vector<PropertyPageHandler::TextAndData> m_COFFItemsInfo;
 	vector<PropertyPageHandler::TextAndData> m_OptionalItemsInfo;
 
-	tstring lstCOFFHeader_OnGetTooltip(int Index);
-	tstring lstOptionalHeader_OnGetTooltip(int Index);
+	wstring lstCOFFHeader_OnGetTooltip(int Index);
+	wstring lstOptionalHeader_OnGetTooltip(int Index);
 	void lstCOFFHeader_OnContextMenu(LONG x, LONG y, int Index);
 	void lstOptionalHeader_OnContextMenu(LONG x, LONG y, int Index);
 
@@ -133,7 +277,7 @@ private:
 	vector<PropertyPageHandler::TextAndData> m_SectionInfo;
 
 	void tabsSections_OnTabChanged(HWND hControl, int SelectedIndex);
-	tstring lstSections_OnGetTooltip(int Index);
+	wstring lstSections_OnGetTooltip(int Index);
 	void lstSections_OnContextMenu(LONG x, LONG y, int Index);
 
 public:
@@ -147,6 +291,7 @@ public:
 class PropertyPageHandler_Manifest : public PropertyPageHandler
 {
 private:
+	HWND m_hImgInfo;
 	HWND m_hStaticManifestSource;
 	HWND m_hComboManifestName;
 	HWND m_hComboManifestLang;
@@ -160,22 +305,26 @@ public:
 
 	void OnInitDialog();
 	void OnCommand(WORD NotificationCode, WORD ControlID, HWND hControl);
+	HBRUSH OnControlColorStatic(HDC hDC, HWND hControl);
 };
 
 // For Imports page
 class PropertyPageHandler_Imports : public PropertyPageHandler
 {
 private:
-	enum TabPages { TabImports, TabDirTable };
+	struct ImportTypeAndDesc
+	{
+		PEReadWrite::ImportType ImportType;
+		void *pImportDesc;
+	};
+	enum class TabPages { ImportsEntry, ImportDirTable };
 
-	HWND m_hListViewImportsModules;
+	HWND m_hListViewImportModules;
 	HWND m_hTabsImports;
 	HWND m_hListViewImportsAndDirTable;
 	HWND m_hCheckBoxCPPNameUnmangle;
 
-	vector<PEReadWrite::ImportNameType> m_lstModules;
-	DWORD m_NoOfStaticImportModules;
-	vector<PEReadWrite::ImportFunction> m_lstFunctions;
+	vector<ImportTypeAndDesc> m_listImportTypeAndDesc;
 	vector<PropertyPageHandler::TextAndData> m_ImportsDirInfo;
 	vector<RTTI::GenericTooltip> m_ImportsDirTooltipInfo;
 	TabPages m_TabPage;
@@ -187,17 +336,17 @@ private:
 	void lstImportsModules_OnColumnHeaderClick(int Index);
 	void lstImportsAndDirTable_OnColumnHeaderClick(int Index);
 	void lstImportsAndDirTable_OnContextMenu(LONG x, LONG y, int Index);
-	tstring lstImportsAndDirTable_OnGetTooltip(int Index);
+	wstring lstImportsAndDirTable_OnGetTooltip(int Index);
 	void tabsImports_OnTabChanged(HWND hControl, int SelectedIndex);
-	void ImportsPage_UpdateDisplay(bool ListViewImportsModules_Changed,
-									bool TabsImports_Changed,
-									bool ChkBoxUnmangle_Changed);
+	void ImportsPage_UpdateDisplay();
 
 public:
 	PropertyPageHandler_Imports(HWND hWnd, PEReadWrite& PEReaderWriter);
 
 	void OnInitDialog();
 	void OnCommand(WORD NotificationCode, WORD ControlID, HWND hControl);
+	HBRUSH OnControlColorStatic(HDC hDC, HWND hControl);
+	HBRUSH OnControlColorButton(HDC hDC, HWND hControl);
 	void OnNotify(UINT NotificationCode, UINT_PTR ControlID, HWND hControl, LPARAM lParam);
 };
 
@@ -207,26 +356,21 @@ class PropertyPageHandler_Exports : public PropertyPageHandler
 private:
 	struct RVANameOrdinalForwarder
 	{
-		tstring RVA;
-		tstring Name;
-		tstring Ordinal;
-		tstring Forwarder;
-
-		RVANameOrdinalForwarder(tstring rva, tstring name, tstring ordinal, tstring forwarder)
-			: RVA(rva), Name(name), Ordinal(ordinal), Forwarder(forwarder) { }
+		wstring RVA;
+		wstring Name;
+		wstring Ordinal;
+		wstring Forwarder;
 	};
 
 	HWND m_hListViewExportDir;
 	HWND m_hListViewExports;
 	HWND m_hCheckBoxCPPNameUnmangle;
 
-	vector<pair<WORD, string> > m_lstOrdinalsAndNames;
-	vector<DWORD> m_lstExportRVAs;
 	vector<PropertyPageHandler::TextAndData> m_ExportDirInfo;
 	vector<RTTI::GenericTooltip> m_ExportDirTooltipInfo;
-	SortOrder m_lstExportsSortOrder;
+	SortOrder m_ExportsSortOrder;
 
-	tstring lstExportDir_OnGetTooltip(int Index);
+	wstring lstExportDir_OnGetTooltip(int Index);
 	void lstExportDir_OnContextMenu(LONG x, LONG y, int Index);
 	void chkExportsUnmangleCPPNames_OnClick(HWND hControl, bool bChecked);
 	void lstExports_OnColumnHeaderClick(int Index);
@@ -244,15 +388,53 @@ public:
 class PropertyPageHandler_Resources : public PropertyPageHandler
 {
 private:
-	HWND m_hComboResourceName;
-	HWND m_hComboResourceLang;
-	HWND m_hListResourceType;
-	HWND m_hStaticResourcePreview;
+	enum class ResourceType { Native, Managed };
+	enum class NodeDataType { ResourceDir, ResourceDirEntry, ResourceData };
+	struct NodeDataTypeAndPtr
+	{
+		ResourceType rsrcType;
+
+		NodeDataType Type;
+		union u
+		{
+			void *pEntry;
+			size_t idxStream;
+
+			u(void *ptr) : pEntry(ptr) {}
+			u(size_t idx) : idxStream(idx) {}
+		}u;
+	};
+
+	unique_ptr<ManagedFuncs::ManagedResourceReader> m_readerManagedResource;
+
+	vector<PropertyPageHandler::TextAndData> m_ResourceInfo;
+	vector<RTTI::GenericTooltip> m_ResourceTooltipInfo;
+
+	vector<NodeDataTypeAndPtr> m_listNodeDataTypeAndPtr;
+
+	unique_ptr<CWindow> m_pPreviewControl;
+
+	HWND m_hTreeViewResourceEntries;
+	HWND m_hListViewResourceInfo;
+	HWND m_hGroupBoxResourcePreview;
+
+	wstring lstResourceInfo_OnGetTooltip(int Index);
+	void tvwResourceInfo_OnSelection(HWND hControl, NMTVITEMCHANGE *pItemChange);
+	void EnumerateNativeResourceDirAndAddToTreeView(HTREEITEM hParentItem,
+													unsigned int idxNode,
+													const PIMAGE_RESOURCE_DIRECTORY& pResDir);
+	void EnumerateManagedResourceDirAndAddToTreeView(HTREEITEM hParentItem,
+													 const unique_ptr<ManagedFuncs::ManagedResourceReader>& readerManagedResource);
+	void TreeViewItemShowData_IfApplicable(HWND hTreeView, HTREEITEM hItem);
+	void displayHexData(LPBYTE pData, int cData, wstring& out);
 
 public:
 	PropertyPageHandler_Resources(HWND hWnd, PEReadWrite& PEReaderWriter);
 
 	void OnInitDialog();
+	void OnShowWindow();
+	void OnHideWindow();
+	void OnNotify(UINT NotificationCode, UINT_PTR ControlID, HWND hControl, LPARAM lParam);
 };
 
 // For Exception Handling page
@@ -280,7 +462,7 @@ private:
 	vector<PropertyPageHandler::TextAndData> m_BaseRelocInfo;
 	vector<RTTI::GenericTooltip> m_BaseRelocTooltipInfo;
 
-	tstring lstBaseRelocTable_OnGetTooltip(int Index);
+	wstring lstBaseRelocTable_OnGetTooltip(int Index);
 	void lstBaseRelocTable_OnContextMenu(LONG x, LONG y, int Index);
 	void tabsBaseRelocations_OnTabChanged(HWND hControl, int SelectedIndex);
 
@@ -302,7 +484,7 @@ private:
 	vector<PropertyPageHandler::TextAndData> m_DebugDirInfo;
 	vector<RTTI::GenericTooltip> m_DebugDirTooltipInfo;
 
-	tstring lstDebugDir_OnGetTooltip(int Index);
+	wstring lstDebugDir_OnGetTooltip(int Index);
 	void lstDebugDir_OnContextMenu(LONG x, LONG y, int Index);
 	void tabsDebugDirs_OnTabChanged(HWND hControl, int SelectedIndex);
 
@@ -338,7 +520,7 @@ private:
 	vector<RTTI::GenericTooltip> m_LoadConfigTooltipInfo;
 	vector<PropertyPageHandler::TextAndData> m_LoadConfigItemsInfo;
 
-	tstring lstLoadConfig_OnGetTooltip(int Index);
+	wstring lstLoadConfig_OnGetTooltip(int Index);
 	void lstLoadConfig_OnContextMenu(LONG x, LONG y, int Index);
 
 public:
@@ -352,6 +534,14 @@ public:
 class PropertyPageHandler_CLR : public PropertyPageHandler
 {
 private:
+	enum Tabs
+	{
+		tabCLRHeader = 0,
+		tabMetadata,
+		tabStrongNameSig,
+		tabVTableFixups
+	};
+
 	HWND m_hTabsCLRData;
 	HWND m_hListViewCLRData;
 	HWND m_hEditCLRData;
@@ -373,10 +563,7 @@ private:
 	{
 		DWORD RVA;
 		DWORD Size;
-		Rect R;
-
-		SelectionRectData(DWORD rva, DWORD size, Rect& r)
-			: RVA(rva), Size(size), R(r) {}
+		Gdiplus::Rect R;
 	};
 
 	static const int MARGIN_X = 10;
@@ -392,23 +579,20 @@ private:
 
 	static const int SELECTION_RECT_ADDR_SPACING = 60;
 
-	static const int LEGENDS_X = MEMORYLAYOUT_X + MEMORYLAYOUT_WIDTH + SELECTION_RECT_ADDR_SPACING + 30;
-	static const int LEGENDS_Y = MEMORYLAYOUT_Y;
-	int LEGENDS_WIDTH;
-	static const int LEGENDS_HEIGHT = 280;
-
-	static const int CUSTOM_X = LEGENDS_X;
-	static const int CUSTOM_Y = LEGENDS_HEIGHT + LEGENDS_Y + 4;
+	static const int CUSTOM_X = 0;
+	static const int CUSTOM_Y = 4;
 
 	static const int CAPTION_Y_DIFF = 15;
 
 	static const int SELECTION_RECT_ADDR_X = MARGIN_X + MEMORYLAYOUT_X + MEMORYLAYOUT_WIDTH - 4;
 
+	bool m_firstPageShow;
+	unique_handle<HBRUSH, decltype(funcDeleteBrush)> m_hBackgroundBrush;
 	ULONG_PTR m_gdiplusToken;
-	Bitmap *m_pbitmapMemoryMap;
+	unique_ptr<Gdiplus::Bitmap> m_pbitmapMemoryMap;
 	DWORD m_HighestRVA;
-	vector<SelectionRectData> m_vectorSelectionRects;
-	int m_SelectionRectIndex;
+	vector<SelectionRectData> m_vectSelectionRects;
+	int m_idxSelectionRect;
 	HTREEITEM m_hTreeViewCustomItem;
 
 	HWND m_hTreeViewLegends;
@@ -422,12 +606,16 @@ private:
 	void txtCustomRVA_OnLostFocus(HWND hControl);
 	void txtCustomSize_OnLostFocus(HWND hControl);
 
+	void UpdateCustomAddressDrawingBox(bool bInvalidate = false);
+	Gdiplus::Pen& RotatePenColor(Gdiplus::Pen& pen, int& Count);
+
 public:
 	PropertyPageHandler_Overview(HWND hWnd, PEReadWrite& PEReaderWriter);
 
 	void OnInitDialog();
 	void OnShowWindow();
 	void OnCommand(WORD NotificationCode, WORD ControlID, HWND hControl);
+	HBRUSH OnControlColorStatic(HDC hDC, HWND hControl);
 	void OnNotify(UINT NotificationCode, UINT_PTR ControlID, HWND hControl, LPARAM lParam);
 	void OnPaint(HDC hdc, const RECT& rectUpdate);
 	void OnDestroy();
@@ -437,6 +625,10 @@ public:
 class PropertyPageHandler_Tools : public PropertyPageHandler
 {
 private:
+	enum class AddressType { RVA, VA, FileOffset };
+	enum class DataSize { OneByte, TwoBytes, FourBytes, EightBytes };
+	enum class Viewer { Hex, Disassembly };
+
 	HWND m_hComboConvertAddrFrom;
 	HWND m_hEditConvertAddrFrom;
 	HWND m_hComboConvertAddrTo;
@@ -445,31 +637,36 @@ private:
 	HWND m_hEditSHA1Hash;
 	HWND m_hEditMD5Hash;
 	HWND m_hEditVerifyHash;
-
-	HBRUSH m_hbrushGreen;
-	HBRUSH m_hbrushRed;
+	HWND m_hStaticVerify;
+	HWND m_hComboHexViewerAddr;
+	HWND m_hComboHexViewerDataSize;
+	HWND m_hEditHexViewerAddr;
+	HWND m_hCheckBoxDisassemble;
+	unique_handle<HWND, decltype(funcDestroyWindow)> m_hTooltipDisassemble;
+	HWND m_hEditHexViewer;
 
 	HANDLE m_hbitmapCorrect;
 	HANDLE m_hbitmapIncorrect;
 
-public:
-	PropertyPageHandler_Tools(HWND hWnd, PEReadWrite& PEReaderWriter);
+	wstring m_SHA1;
+	wstring m_MD5;
 
-	void OnInitDialog();
-	void OnCommand(WORD NotificationCode, WORD ControlID, HWND hControl);
+	Viewer m_View;
 
 	void btnConvertAddr_OnClick();
 	void txtVerifyHash_Changed();
+	void txtHexViewerAddress_Changed();
+	void cmbHexViewAddrType_OnSelectionChanged(HWND hControl, int SelectedIndex);
+	void cmbHexViewDataSize_OnSelectionChanged(HWND hControl, int SelectedIndex);
+	void chkHexViewDisassemble_OnClick(HWND hControl, bool bChecked);
+
+	void UpdateHexViewer();
+
+public:
+	PropertyPageHandler_Tools(HWND hWnd, PEReadWrite& PEReaderWriter);
+	~PropertyPageHandler_Tools();
+
+	void OnInitDialog();
+	void OnCommand(WORD NotificationCode, WORD ControlID, HWND hControl);
+	HBRUSH OnControlColorStatic(HDC hDC, HWND hControl);
 };
-
-
-typedef struct CompareFuncParam
-{
-	HWND hListView;
-	int iColumn;
-	SortOrder Order;
-} *pCompareFuncParam;
-
-int CALLBACK StringCompareFunc(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort);
-int CALLBACK NumberCompareFunc(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort);
-int CALLBACK HexNumberCompareFunc(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort);

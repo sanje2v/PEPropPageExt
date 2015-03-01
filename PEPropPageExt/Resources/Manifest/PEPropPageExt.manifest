@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
+<assemblyIdentity
+    version="1.0.0.0"
+    processorArchitecture="*"
+    name="SanjeevSharma.PEPropPageExt.{8C762F3E-2463-4012-B54F-EBD3FCF89563}"
+    type="win32"
+/>
+<description>Microsoft Portable Executable property page extension for Windows Explorer</description>
+<dependency>
+  <dependentAssembly>
+    <assemblyIdentity
+        type="win32"
+        name="Microsoft.Windows.Common-Controls"
+        version="6.0.0.0"
+        processorArchitecture="*"
+        publicKeyToken="6595b64144ccf1df"
+        language="*"
+      />
+  </dependentAssembly>
+</dependency>
+</assembly>

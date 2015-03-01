@@ -1,26 +1,28 @@
+#include "stdafx.h"
 #include "PropertyPageHandler.h"
 
 
 PropertyPageHandler_Imports::PropertyPageHandler_Imports(HWND hWnd, PEReadWrite& PEReaderWriter)
-		: PropertyPageHandler(hWnd, PEReaderWriter),
-			m_TabPage(TabImports),
-			m_lstModulesSortOrder(None),
-			m_lstImportsSortOrder(None)
+	: PropertyPageHandler(hWnd, std::ref(PEReaderWriter)),
+	m_TabPage(TabPages::ImportsEntry),
+	m_lstModulesSortOrder(SortOrder::None),
+	m_lstImportsSortOrder(SortOrder::None)
 {
-	m_hListViewImportsModules = GetDlgItem(m_hWnd, IDC_LISTIMPORTSMODULES);
+	m_hListViewImportModules = GetDlgItem(m_hWnd, IDC_LISTIMPORTSMODULES);
 	m_hTabsImports = GetDlgItem(m_hWnd, IDC_TABSIMPORTS);
 	m_hListViewImportsAndDirTable = GetDlgItem(m_hWnd, IDC_LISTIMPORTSFUNCSANDDIRTABLE);
 	m_hCheckBoxCPPNameUnmangle = GetDlgItem(m_hWnd, IDC_CHKCPPNAMEUNMANGLEIMPORTS);
 
 	// Setup controls with layout manager
-	m_pLayoutManager->AddChildConstraint(IDC_TABSIMPORTS, CWA_LEFTRIGHT, CWA_TOPBOTTOM);
-	m_pLayoutManager->AddChildConstraint(IDC_LISTIMPORTSFUNCSANDDIRTABLE, CWA_LEFTRIGHT, CWA_TOPBOTTOM);
-	m_pLayoutManager->AddChildConstraint(IDC_CHKCPPNAMEUNMANGLEIMPORTS, CWA_DEFAULT, CWA_BOTTOM);
+	m_LayoutManager.AddChildConstraint(IDC_TABSIMPORTS, CWA_LEFTRIGHT, CWA_TOPBOTTOM);
+	m_LayoutManager.AddChildConstraint(IDC_LISTIMPORTSFUNCSANDDIRTABLE, CWA_LEFTRIGHT, CWA_TOPBOTTOM);
+	m_LayoutManager.AddChildConstraint(IDC_CHKCPPNAMEUNMANGLEIMPORTS, CWA_DEFAULT, CWA_BOTTOM);
 	// Make ZOrder: Listview (On top) and Tab Control (On bottom)
 	SetWindowPos(m_hTabsImports, m_hListViewImportsAndDirTable, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE);
+	SetWindowPos(m_hTabsImports, m_hCheckBoxCPPNameUnmangle, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE);
 
 	// Set full row selection style for listviews
-	ListView_SetExtendedListViewStyleEx(m_hListViewImportsModules, LVS_EX_FULLROWSELECT, LVS_EX_FULLROWSELECT);
+	ListView_SetExtendedListViewStyleEx(m_hListViewImportModules, LVS_EX_FULLROWSELECT, LVS_EX_FULLROWSELECT);
 	ListView_SetExtendedListViewStyleEx(m_hListViewImportsAndDirTable,
 										LVS_EX_FULLROWSELECT | LVS_EX_INFOTIP | LVS_EX_LABELTIP,
 										LVS_EX_FULLROWSELECT | LVS_EX_INFOTIP | LVS_EX_LABELTIP);
@@ -29,58 +31,106 @@ PropertyPageHandler_Imports::PropertyPageHandler_Imports(HWND hWnd, PEReadWrite&
 void PropertyPageHandler_Imports::OnInitDialog()
 {
 	// Fill controls with data
-	static LPTSTR szModulesColumnText[] = {_T("Name"), _T("Link Type")};
-	static LPTSTR szImportsTabText[] = {_T("Imports"), _T("Import Directory Table")};
-	RTTI::GetTooltipInfo(m_ImportsDirTooltipInfo, 0, RTTI::RTTI_IMPORT_DIRECTORY);	// Get tooltip data
-	vector<TextAndData> ModulesItemsInfo;
-	m_lstModules = m_PEReaderWriter.GetImportsModules(&m_NoOfStaticImportModules);
+	static LPWSTR szModulesColumnText[] = { L"Name", L"Link Type" };
+	static LPWSTR szModuleImportTypes[] = { L"Static", L"Delayed" };
 
 	// Insert ListView columns
 	LV_COLUMN column;
-	ZeroMemory(&column, sizeof(LV_COLUMN));
+	ZeroMemory(&column, sizeof(column));
 
-	for (unsigned int i = 0; i < GetArraySize(szModulesColumnText); i++)
+	for (size_t i = 0; i < ARRAYSIZE(szModulesColumnText); ++i)
 	{
 		column.mask = LVCF_TEXT;
 		column.pszText = szModulesColumnText[i];
-		ListView_InsertColumn(m_hListViewImportsModules, i, &column);
+		ListView_InsertColumn(m_hListViewImportModules, i, &column);
 	}
 
 	// Insert ListView items for Modules list view
 	LV_ITEM item;
-	ZeroMemory(&item, sizeof(LV_ITEM));
+	ZeroMemory(&item, sizeof(item));
 
-	for (unsigned int i = 0; i < m_lstModules.size(); i++)
+	// Add static imports first
+	int err;
+	if (m_PEReaderWriter.hasStaticImports())
 	{
-		item.iItem = i;
-		item.iSubItem = 0;
-		item.mask = LVIF_TEXT | LVIF_PARAM;
-		item.pszText = (LPTSTR) m_lstModules[i].Name.c_str();
-		item.lParam = (LPARAM) (i - (m_lstModules[i].Type == PEReadWrite::Delayed ? m_NoOfStaticImportModules : 0));
-		ListView_InsertItem(m_hListViewImportsModules, &item);
+		const size_t NoOfStaticImportModules = m_PEReaderWriter.getNoOfStaticImportModules();
 
-		item.iSubItem = 1;
-		item.mask = LVIF_TEXT;
-		item.pszText = (LPTSTR) (m_lstModules[i].Type == PEReadWrite::Static ? _T("Static") : _T("Delayed"));
-		item.lParam = NULL;
-		ListView_SetItem(m_hListViewImportsModules, &item);
+		for (size_t i = 0; i < NoOfStaticImportModules; ++i)
+		{
+			PIMAGE_IMPORT_DESCRIPTOR pImportDesc;
+			err = m_PEReaderWriter.getStaticModuleDescriptor(int(i), std::ref(pImportDesc));
+			if (err)
+			{
+				LogError(L"Static import descriptor for index " + DWORD_toString(DWORD(i)) + L" is corrupted. File is not valid.", true);
+				break;
+			}
+
+			item.iItem = int(i);
+			item.iSubItem = 0;
+			item.mask = LVIF_TEXT | LVIF_PARAM;
+			item.pszText = LPWSTR(_wcsdup(m_PEReaderWriter.getStaticModuleName(std::cref(pImportDesc)).c_str()));
+			m_listImportTypeAndDesc.push_back({ PEReadWrite::ImportType::Static, pImportDesc });
+			item.lParam = LPARAM(m_listImportTypeAndDesc.size() - 1);
+			ListView_InsertItem(m_hListViewImportModules, &item);
+			free(item.pszText);
+
+			item.iSubItem = 1;
+			item.mask = LVIF_TEXT;
+			item.pszText = LPWSTR(szModuleImportTypes[0]);
+			item.lParam = NULL;
+			ListView_SetItem(m_hListViewImportModules, &item);
+		}
+	}
+
+	// Add delayed imports now, if any
+	if (m_PEReaderWriter.hasDelayedImports())
+	{
+		const int NextItemIndex = item.iItem + 1;
+		const size_t NoOfDelayedImportModules = m_PEReaderWriter.getNoOfDelayedImportModules();
+
+		for (size_t i = 0; i < NoOfDelayedImportModules; ++i)
+		{
+			PImgDelayDescr pImportDesc;
+			m_PEReaderWriter.getDelayedModuleDescriptor(int(i), std::ref(pImportDesc));
+
+			item.iItem = NextItemIndex + int(i);
+			item.iSubItem = 0;
+			item.mask = LVIF_TEXT | LVIF_PARAM;
+			item.pszText = LPWSTR(_wcsdup(m_PEReaderWriter.getDelayedModuleName(std::cref(pImportDesc)).c_str()));
+			m_listImportTypeAndDesc.push_back({ PEReadWrite::ImportType::Delayed, pImportDesc });
+			item.lParam = LPARAM(m_listImportTypeAndDesc.size() - 1);
+			ListView_InsertItem(m_hListViewImportModules, &item);
+			free(item.pszText);
+
+			item.iSubItem = 1;
+			item.mask = LVIF_TEXT;
+			item.pszText = LPWSTR(szModuleImportTypes[1]);
+			item.lParam = NULL;
+			ListView_SetItem(m_hListViewImportModules, &item);
+		}
 	}
 
 	// Resize columns
-	for (unsigned int i = 0; i < GetArraySize(szModulesColumnText); i++)
-		ListView_SetColumnWidth(m_hListViewImportsModules, i,
-								i == GetArraySize(szModulesColumnText) - 1 ? LVSCW_AUTOSIZE_USEHEADER : LVSCW_AUTOSIZE);
+	for (size_t i = 0; i < ARRAYSIZE(szModulesColumnText); ++i)
+		ListView_SetColumnWidth(m_hListViewImportModules,
+								i,
+								i == ARRAYSIZE(szModulesColumnText) - 1 ? LVSCW_AUTOSIZE_USEHEADER : LVSCW_AUTOSIZE);
+
+	static LPWSTR szImportsTabText[] = { L"Imports", L"Import Directory Table" };
 
 	// Insert tab items
-	for(unsigned int i = 0; i < GetArraySize(szImportsTabText); i++)
+	for (size_t i = 0; i < ARRAYSIZE(szImportsTabText); ++i)
 	{
 		TCITEM item;
 		item.mask = TCIF_TEXT;
-		item.pszText = (LPTSTR) szImportsTabText[i];
+		item.pszText = LPWSTR(szImportsTabText[i]);
 		TabCtrl_InsertItem(m_hTabsImports, i, &item);
 	}
 
-	ListView_SetItemState(m_hListViewImportsModules, 0, LVIS_FOCUSED | LVIS_SELECTED, LVIS_FOCUSED | LVIS_SELECTED);
+	ListView_SetItemState(m_hListViewImportModules, 0, LVIS_FOCUSED | LVIS_SELECTED, LVIS_FOCUSED | LVIS_SELECTED);
+
+	// FIXME: File offset is not computed correctly here
+	RTTI::GetTooltipInfo(m_ImportsDirTooltipInfo, 0, RTTI::RTTI_IMPORT_DIRECTORY);	// Get tooltip data
 }
 
 void PropertyPageHandler_Imports::chkImportsUnmangleCPPNames_OnClick(HWND hControl, bool IsChecked)
@@ -90,7 +140,7 @@ void PropertyPageHandler_Imports::chkImportsUnmangleCPPNames_OnClick(HWND hContr
 	// Save scrolled view rectangle
 	ListView_GetViewRect(m_hListViewImportsAndDirTable, &ViewRect);
 
-	ImportsPage_UpdateDisplay(false, false, true);
+	ImportsPage_UpdateDisplay();
 
 	// Scroll to the place where the user was earlier
 	ListView_Scroll(m_hListViewImportsAndDirTable, abs(ViewRect.left), abs(ViewRect.top));
@@ -98,70 +148,71 @@ void PropertyPageHandler_Imports::chkImportsUnmangleCPPNames_OnClick(HWND hContr
 
 void PropertyPageHandler_Imports::lstImportsModules_OnSelection(HWND hControl, int SelectedIndex)
 {
-	ImportsPage_UpdateDisplay(true, false, false);
+	ImportsPage_UpdateDisplay();
 }
 
 void PropertyPageHandler_Imports::lstImportsModules_OnColumnHeaderClick(int Index)
 {
-	HWND hHeader = ListView_GetHeader(m_hListViewImportsModules);
+	HWND hHeader = ListView_GetHeader(m_hListViewImportModules);
 	HDITEM hdrItem;
-	ZeroMemory(&hdrItem, sizeof(HDITEM));
+	ZeroMemory(&hdrItem, sizeof(hdrItem));
 	hdrItem.mask = HDI_FORMAT;
 	hdrItem.fmt = HDF_LEFT | HDF_STRING;
 
 	// Restore header's property to normal header without arrow
-	for (int i = 0; i < Header_GetItemCount(hHeader); i++)
+	for (int i = 0; i < Header_GetItemCount(hHeader); ++i)
 		Header_SetItem(hHeader, i, &hdrItem);
 
 	switch (m_lstModulesSortOrder)
 	{
-	case None:
-	case Descending:
-		hdrItem.fmt |= HDF_SORTDOWN;
-		m_lstModulesSortOrder = Ascending;
+		case SortOrder::None:
+		case SortOrder::Descending:
+			hdrItem.fmt |= HDF_SORTDOWN;
+			m_lstModulesSortOrder = SortOrder::Ascending;
+			break;
 
-		break;
-
-	case Ascending:
-		hdrItem.fmt |= HDF_SORTUP;
-		m_lstModulesSortOrder = Descending;
+		case SortOrder::Ascending:
+			hdrItem.fmt |= HDF_SORTUP;
+			m_lstModulesSortOrder = SortOrder::Descending;
+			break;
 	}
 
 	// Set header property of selected column with arrow
 	Header_SetItem(hHeader, Index, &hdrItem);
 
 	// Set sorting function
-	CompareFuncParam Params = {m_hListViewImportsModules, Index, m_lstModulesSortOrder};
-	ListView_SortItemsEx(m_hListViewImportsModules, StringCompareFunc, &Params);
+	CompareFuncParam Params = {m_hListViewImportModules, Index, m_lstModulesSortOrder};
+	ListView_SortItemsEx(m_hListViewImportModules, funcStringSort, &Params);
 }
 
 void PropertyPageHandler_Imports::lstImportsAndDirTable_OnColumnHeaderClick(int Index)
 {
-	if (m_TabPage != TabImports)
+	if (m_TabPage != TabPages::ImportsEntry)
 		return;
 
 	HWND hHeader = ListView_GetHeader(m_hListViewImportsAndDirTable);
 	HDITEM hdrItem;
-	ZeroMemory(&hdrItem, sizeof(HDITEM));
+	ZeroMemory(&hdrItem, sizeof(hdrItem));
+
 	hdrItem.mask = HDI_FORMAT;
 	hdrItem.fmt = HDF_LEFT | HDF_STRING;
 
 	// Restore header's property to normal header without arrow
-	for (int i = 0; i < Header_GetItemCount(hHeader); i++)
+	for (int i = 0; i < Header_GetItemCount(hHeader); ++i)
 		Header_SetItem(hHeader, i, &hdrItem);
 
 	switch (m_lstImportsSortOrder)
 	{
-	case None:
-	case Descending:
-		hdrItem.fmt |= HDF_SORTDOWN;
-		m_lstImportsSortOrder = Ascending;
+		case SortOrder::None:
+		case SortOrder::Descending:
+			hdrItem.fmt |= HDF_SORTDOWN;
+			m_lstImportsSortOrder = SortOrder::Ascending;
+			break;
 
-		break;
-
-	case Ascending:
-		hdrItem.fmt |= HDF_SORTUP;
-		m_lstImportsSortOrder = Descending;
+		case SortOrder::Ascending:
+			hdrItem.fmt |= HDF_SORTUP;
+			m_lstImportsSortOrder = SortOrder::Descending;
+			break;
 	}
 
 	// Set header property of selected column with arrow
@@ -174,217 +225,374 @@ void PropertyPageHandler_Imports::lstImportsAndDirTable_OnColumnHeaderClick(int 
 	{
 	case 0:
 	case 1:
-		ListView_SortItemsEx(m_hListViewImportsAndDirTable, NumberCompareFunc, &Params);
-
+		ListView_SortItemsEx(m_hListViewImportsAndDirTable, funcNumberSort, &Params);
 		break;
 
 	case 2:
-		ListView_SortItemsEx(m_hListViewImportsAndDirTable, StringCompareFunc, &Params);
+		ListView_SortItemsEx(m_hListViewImportsAndDirTable, funcStringSort, &Params);
+		break;
 	}
 }
 
 void PropertyPageHandler_Imports::lstImportsAndDirTable_OnContextMenu(LONG x, LONG y, int Index)
 {
-	if (m_TabPage != TabDirTable)
+	if (m_TabPage != TabPages::ImportDirTable)
 		return;
 
-	return Generic_OnContextMenu(m_ImportsDirTooltipInfo, m_ImportsDirInfo, x, y, Index);
+	Generic_OnContextMenu(m_ImportsDirTooltipInfo, m_ImportsDirInfo, x, y, Index);
 }
 
-tstring PropertyPageHandler_Imports::lstImportsAndDirTable_OnGetTooltip(int Index)
+wstring PropertyPageHandler_Imports::lstImportsAndDirTable_OnGetTooltip(int Index)
 {
-	if (m_TabPage != TabDirTable)
-		return _T("");
+	if (m_TabPage != TabPages::ImportDirTable)
+		return L"";
 
 	return Generic_OnGetTooltip(m_ImportsDirTooltipInfo, Index);
 }
 
 void PropertyPageHandler_Imports::tabsImports_OnTabChanged(HWND hControl, int SelectedIndex)
 {
-	ImportsPage_UpdateDisplay(false, true, false);
+	switch (SelectedIndex)
+	{
+		case 0: m_TabPage = TabPages::ImportsEntry; break;
+		case 1: m_TabPage = TabPages::ImportDirTable; break;
+	}
+
+	ImportsPage_UpdateDisplay();
 }
 
-void PropertyPageHandler_Imports::ImportsPage_UpdateDisplay(bool ListViewImportsModules_Changed, bool TabsImports_Changed, bool ChkBoxUnmangle_Changed)
+void PropertyPageHandler_Imports::ImportsPage_UpdateDisplay()
 {
-	static LPTSTR szImportsColumnText[] = {_T("Ordinal"), _T("Hint"), _T("Name")};
-	static const int TAB_IMPORTFUNCS = 0;
-	static const int TAB_IMPORTDIR = 1;
-
-	int ListViewImportsModules_SelectedIndex = ListView_GetNextItem(m_hListViewImportsModules, -1, LVNI_SELECTED);
-	int TabsImports_SelectedIndex = TabCtrl_GetCurSel(GetDlgItem(m_hWnd, IDC_TABSIMPORTS));
-	bool ChkBoxUnmangle_Checked = Button_GetCheck(m_hCheckBoxCPPNameUnmangle) == BST_CHECKED;
-	LVITEM SelectedItem;
-	DWORD Index;
+	int lstImportModules_SelectedIndex = ListView_GetNextItem(m_hListViewImportModules, -1, LVNI_SELECTED);
+	bool chkBoxUnmangle_Checked = (Button_GetCheck(m_hCheckBoxCPPNameUnmangle) == BST_CHECKED);
 
 	// Delete all columns and all items in ListViewImportsFuncsAndDirTable
-	while (ListView_DeleteColumn(m_hListViewImportsAndDirTable, 0));
-	ListView_DeleteAllItems(m_hListViewImportsAndDirTable);
+	ListView_Reset(m_hListViewImportsAndDirTable);
 
-	if (ListViewImportsModules_SelectedIndex < 0)
+	// If no module is selected, do nothing
+	if (lstImportModules_SelectedIndex < 0)
 		return;
 
-	ZeroMemory(&SelectedItem, sizeof(LVITEM));
-	SelectedItem.iItem = ListViewImportsModules_SelectedIndex;
+	// Get the 'LPARAM' of the selected item. It contains pointer to import directory structure
+	size_t ImportTypeAndDescIndex; // Index pointing to item in 'm_listImportTypeAndDesc'
+	LVITEM SelectedItem;
+
+	ZeroMemory(&SelectedItem, sizeof(SelectedItem));
+	SelectedItem.iItem = lstImportModules_SelectedIndex;
 	SelectedItem.mask = LVIF_PARAM;
-	SelectedItem.lParam = -1;
-	ListView_GetItem(m_hListViewImportsModules, &SelectedItem);
+	SelectedItem.lParam = LPARAM(-1);
+	ListView_GetItem(m_hListViewImportModules, &SelectedItem);
 
-	if ((Index = (DWORD) SelectedItem.lParam) < 0)
+	if (SelectedItem.lParam == LPARAM(-1))
 		return;
 
-	if (ListViewImportsModules_Changed || TabsImports_Changed)
+	ImportTypeAndDescIndex = size_t(SelectedItem.lParam);
+	int err;
+
+	switch (m_TabPage)
 	{
-		switch (TabsImports_SelectedIndex)
+		case TabPages::ImportsEntry:
 		{
-		case TAB_IMPORTFUNCS:
+			m_lstImportsSortOrder = SortOrder::None;
+
+			// Show 'Unmangle C++ names' checkbox
+			ShowWindow(m_hCheckBoxCPPNameUnmangle, SW_SHOW);
+
+			static LPWSTR szImportsColumnText[] = { L"Ordinal", L"Hint", L"Name" };
+
+			// Insert ListView columns
+			LV_COLUMN column;
+			ZeroMemory(&column, sizeof(column));
+
+			for (size_t i = 0; i < ARRAYSIZE(szImportsColumnText); ++i)
 			{
-				m_TabPage = TabImports;
-				m_lstImportsSortOrder = None;
-				m_lstFunctions = m_PEReaderWriter.GetImportsFunctions(Index, m_lstModules[ListViewImportsModules_SelectedIndex].Type);
-
-				// Show 'Unmangle C++ names' checkbox
-				ShowWindow(m_hCheckBoxCPPNameUnmangle, SW_SHOW);
-
-				ImportsPage_UpdateDisplay(false, false, true);
+				column.mask = LVCF_TEXT;
+				column.pszText = szImportsColumnText[i];
+				ListView_InsertColumn(m_hListViewImportsAndDirTable, i, &column);
 			}
 
-			break;
+			// Add items to Import Functions listview
+			LV_ITEM item;
+			ZeroMemory(&item, sizeof(item));
 
-		case TAB_IMPORTDIR:
+			ImportTypeAndDesc SelectedImportTypeAndDesc = m_listImportTypeAndDesc[ImportTypeAndDescIndex];
+
+			switch (SelectedImportTypeAndDesc.ImportType)
 			{
-				m_TabPage = TabDirTable;
-
-				// Insert ListView columns
-				LV_COLUMN column;
-				ZeroMemory(&column, sizeof(LV_COLUMN));
-
-				for (int i = 0; i < GetArraySize(GenericColumnText); i++)
+				case PEReadWrite::ImportType::Static:
 				{
-					column.mask = LVCF_TEXT;
-					column.pszText = GenericColumnText[i];
-					ListView_InsertColumn(m_hListViewImportsAndDirTable, i, &column);
-				}
+					PIMAGE_IMPORT_DESCRIPTOR pImportDesc = PIMAGE_IMPORT_DESCRIPTOR(SelectedImportTypeAndDesc.pImportDesc);
+					const int NoOfStaticModuleImports = m_PEReaderWriter.getNoOfStaticModuleImports(std::cref(pImportDesc));
 
-				// Fill with data
-				m_ImportsDirInfo.clear();
-
-				switch (m_lstModules[Index].Type)
-				{
-				case PEReadWrite::Static:
+					for (int i = 0; i < NoOfStaticModuleImports; ++i)
 					{
-						IMAGE_IMPORT_DESCRIPTOR &ImportDescriptor = *m_PEReaderWriter.GetImportDirectory(Index);			
+						WORD Ordinal;
+						WORD Hint;
+						string Name;
+						bool hasOrdinal;
 
-						FillData(m_ImportsDirInfo, _T("Import Lookup Table RVA"), DWORD_toString(ImportDescriptor.OriginalFirstThunk, Hexadecimal),
-																														ImportDescriptor.OriginalFirstThunk == 0 ?
-																							_T("Shouldn't be zero, probably faulty Borland linker") : _T(""));
-						FillData(m_ImportsDirInfo, _T("Time/Date Stamp"), DWORD_toString(ImportDescriptor.TimeDateStamp), m_PEReaderWriter.IsImportsAlreadyBound() ?
-																								_T("Already bound, invalid stamp") : _T("Meaningless until bound"));
-						FillData(m_ImportsDirInfo, _T("Forwarder Chain"), Integer_toString(ImportDescriptor.ForwarderChain));
-						FillData(m_ImportsDirInfo, _T("Name RVA"), DWORD_toString(ImportDescriptor.Name, Hexadecimal), 
-													_T("\"") + MultiByte_toString((char *) m_PEReaderWriter.GetVA(ImportDescriptor.Name)) + _T("\""));
-						FillData(m_ImportsDirInfo, _T("Import Address Table RVA"),  DWORD_toString(ImportDescriptor.FirstThunk, Hexadecimal));
-					}
+						switch (m_PEReaderWriter.getPEType())
+						{
+							case PEReadWrite::PEType::PE32:
+							{
+								PIMAGE_THUNK_DATA32 pThunkData;
+								err = m_PEReaderWriter.getStaticModuleImport(std::cref(pImportDesc),
+																			 i,
+																			 std::ref(pThunkData));
+								if (err)
+								{
+									LogError(L"ERROR: Couldn't read import at index " + DWORD_toString(i) + L". File is not valid.", true);
+									break;
+								}
 
-					break;
+								err = m_PEReaderWriter.getModuleImportOrdinalOrName(std::cref(pThunkData),
+																					std::ref(Ordinal),
+																					std::ref(Hint),
+																					std::ref(Name),
+																					std::ref(hasOrdinal));
+								if (err)
+								{
+									LogError(L"ERROR: Couldn't read import ordinal/name at index " + DWORD_toString(i) + L". File is not valid.", true);
+									break;
+								}
+							}
+							break;
 
-				case PEReadWrite::Delayed:
-					{
-						ImgDelayDescr &ImportDescriptor = *m_PEReaderWriter.GetDelayImportDirectory(Index - m_NoOfStaticImportModules);
+							case PEReadWrite::PEType::PE64:
+							{
+								PIMAGE_THUNK_DATA64 pThunkData;
+								err = m_PEReaderWriter.getStaticModuleImport(std::cref(pImportDesc),
+																			 i,
+																			 std::ref(pThunkData));
+								if (err)
+								{
+									LogError(L"ERROR: Couldn't read import at index " + DWORD_toString(i) + L". File is not valid.", true);
+									break;
+								}
 
-						FillData(m_ImportsDirInfo, _T("Attributes"), DWORD_toString(ImportDescriptor.grAttrs), _T("Reserved, must be zero"));
-						FillData(m_ImportsDirInfo, _T("Name RVA"), DWORD_toString(ImportDescriptor.rvaDLLName, Hexadecimal), 
-												_T("\"") + MultiByte_toString((char *) m_PEReaderWriter.GetVA(ImportDescriptor.rvaDLLName)) + _T("\""));
-						FillData(m_ImportsDirInfo, _T("Module Handle"),
-																DWORD_toString(ImportDescriptor.rvaHmod, Hexadecimal), _T("Meaningless until bound"));
-						FillData(m_ImportsDirInfo, _T("Delay Import Address Table RVA"),
-																	DWORD_toString(ImportDescriptor.rvaIAT, Hexadecimal), _T("Meaningless until bound"));
-						FillData(m_ImportsDirInfo, _T("Name Table RVA"), DWORD_toString(ImportDescriptor.rvaINT, Hexadecimal));
-						FillData(m_ImportsDirInfo, _T("Bound Table RVA"),
-															DWORD_toString(ImportDescriptor.rvaBoundIAT, Hexadecimal), _T("Meaningless until bound"));
-						FillData(m_ImportsDirInfo, _T("Unload Table RVA"), DWORD_toString(ImportDescriptor.rvaUnloadIAT, Hexadecimal));
-						FillData(m_ImportsDirInfo, _T("Time Stamp"), DWORD_toString(ImportDescriptor.dwTimeStamp), _T("Meaningless until bound"));
+								err = m_PEReaderWriter.getModuleImportOrdinalOrName(std::cref(pThunkData),
+																					std::ref(Ordinal),
+																					std::ref(Hint),
+																					std::ref(Name),
+																					std::ref(hasOrdinal));
+								if (err)
+								{
+									LogError(L"ERROR: Couldn't read import ordinal/name at index " + DWORD_toString(i) + L". File is not valid.", true);
+									break;
+								}
+							}
+							break;
+						}
+
+						// Ordinal
+						item.iItem = i;
+						item.iSubItem = 0;
+						item.mask = LVIF_TEXT;
+						item.pszText = LPWSTR(_wcsdup((hasOrdinal ? DWORD_toString(Ordinal).c_str() : L"n/a")));
+						ListView_InsertItem(m_hListViewImportsAndDirTable, &item);
+						free(item.pszText);
+
+						// Hint
+						item.iSubItem = 1;
+						item.pszText = LPWSTR(_wcsdup((!hasOrdinal ? DWORD_toString(Hint).c_str() : L"n/a")));
+						ListView_SetItem(m_hListViewImportsAndDirTable, &item);
+						free(item.pszText);
+
+						// Name
+						item.iSubItem = 2;
+						item.pszText = LPWSTR(_wcsdup(!hasOrdinal ? MultiByte_toString(chkBoxUnmangle_Checked ? PEReadWrite::unmangleCPPNames(Name, PEReadWrite::SymbolPart::Full) : Name).c_str() : L"n/a"));
+						ListView_SetItem(m_hListViewImportsAndDirTable, &item);
+						free(item.pszText);
 					}
 				}
+				break;
 
-				// Add items to Import Descriptor Table listview
-				for(int i = 0; i < m_ImportsDirInfo.size(); i++)
+				case PEReadWrite::ImportType::Delayed:
 				{
-					LV_ITEM item;
-					ZeroMemory(&item, sizeof(LV_ITEM));
+					PImgDelayDescr pImportDesc = PImgDelayDescr(SelectedImportTypeAndDesc.pImportDesc);
+					const int NoOfDelayedModuleImports = m_PEReaderWriter.getNoOfDelayedModuleImports(std::cref(pImportDesc));
 
-					item.iItem = i;
-					item.mask = LVIF_TEXT;
-					item.pszText = (LPTSTR) m_ImportsDirInfo[i].szText.c_str();
-					ListView_InsertItem(m_hListViewImportsAndDirTable, &item);
+					for (int i = 0; i < NoOfDelayedModuleImports; ++i)
+					{
+						WORD Ordinal;
+						WORD Hint;
+						string Name;
+						bool hasOrdinal;
 
-					item.iSubItem = 1;
-					item.pszText = (LPTSTR) m_ImportsDirInfo[i].szData.c_str();
-					ListView_SetItem(m_hListViewImportsAndDirTable, &item);
+						switch (m_PEReaderWriter.getPEType())
+						{
+							case PEReadWrite::PEType::PE32:
+							{
+								PIMAGE_THUNK_DATA32 pThunkData;
+								err = m_PEReaderWriter.getDelayedModuleImport(std::cref(pImportDesc),
+																			  i,
+																			  std::ref(pThunkData));
+								if (err)
+								{
+									LogError(L"ERROR: Couldn't read import at index " + DWORD_toString(i) + L". File is not valid.", true);
+									break;
+								}
 
-					item.iSubItem = 2;
-					item.pszText = (LPTSTR) m_ImportsDirInfo[i].szComments.c_str();
-					ListView_SetItem(m_hListViewImportsAndDirTable, &item);
+								err = m_PEReaderWriter.getModuleImportOrdinalOrName(std::cref(pThunkData),
+																					std::ref(Ordinal),
+																					std::ref(Hint),
+																					std::ref(Name),
+																					std::ref(hasOrdinal));
+								if (err)
+								{
+									LogError(L"ERROR: Couldn't read import ordinal/name at index " + DWORD_toString(i) + L". File is not valid.", true);
+									break;
+								}
+							}
+							break;
+
+							case PEReadWrite::PEType::PE64:
+							{
+								PIMAGE_THUNK_DATA64 pThunkData;
+								err = m_PEReaderWriter.getDelayedModuleImport(std::cref(pImportDesc),
+																			  i,
+																			  std::ref(pThunkData));
+								if (err)
+								{
+									LogError(L"ERROR: Couldn't read import at index " + DWORD_toString(i) + L". File is not valid.", true);
+									break;
+								}
+
+								err = m_PEReaderWriter.getModuleImportOrdinalOrName(std::cref(pThunkData),
+																					std::ref(Ordinal),
+																					std::ref(Hint),
+																					std::ref(Name),
+																					std::ref(hasOrdinal));
+								if (err)
+								{
+									LogError(L"ERROR: Couldn't read import ordinal/name at index " + DWORD_toString(i) + L". File is not valid.", true);
+									break;
+								}
+							}
+							break;
+						}
+
+						// Ordinal
+						item.iItem = i;
+						item.iSubItem = 0;
+						item.mask = LVIF_TEXT;
+						item.pszText = LPWSTR(_wcsdup((hasOrdinal ? DWORD_toString(Ordinal).c_str() : L"n/a")));
+						ListView_InsertItem(m_hListViewImportsAndDirTable, &item);
+						free(item.pszText);
+
+						// Hint
+						item.iSubItem = 1;
+						item.pszText = LPWSTR(_wcsdup((!hasOrdinal ? DWORD_toString(Hint).c_str() : L"n/a")));
+						ListView_SetItem(m_hListViewImportsAndDirTable, &item);
+						free(item.pszText);
+
+						// Name
+						item.iSubItem = 2;
+						item.pszText = LPWSTR(_wcsdup(!hasOrdinal ? MultiByte_toString(chkBoxUnmangle_Checked ? PEReadWrite::unmangleCPPNames(Name, PEReadWrite::SymbolPart::Full) : Name).c_str() : L"n/a"));
+						ListView_SetItem(m_hListViewImportsAndDirTable, &item);
+						free(item.pszText);
+					}
 				}
-
-				// Resize column
-				for(int i = 0; i < GetArraySize(GenericColumnText); i++)
-					ListView_SetColumnWidth(m_hListViewImportsAndDirTable, i, i == GetArraySize(GenericColumnText) - 1 ? LVSCW_AUTOSIZE_USEHEADER : LVSCW_AUTOSIZE);
-
-				// Hide 'Unmangle C++ names' checkbox
-				ShowWindow(m_hCheckBoxCPPNameUnmangle, SW_HIDE);
+				break;
 			}
+
+			// Resize column
+			for (int i = 0; i < ARRAYSIZE(szImportsColumnText); i++)
+				ListView_SetColumnWidth(m_hListViewImportsAndDirTable, i, LVSCW_AUTOSIZE_USEHEADER);
 		}
-	}
-	else
-	{
-		if (m_lstFunctions.size() == 0)
-			return;
+		break;
 
-		// Insert ListView columns
-		LV_COLUMN column;
-		ZeroMemory(&column, sizeof(LV_COLUMN));
-
-		for (int i = 0; i < GetArraySize(szImportsColumnText); i++)
+		case TabPages::ImportDirTable:
 		{
-			column.mask = LVCF_TEXT;
-			column.pszText = szImportsColumnText[i];
-			ListView_InsertColumn(m_hListViewImportsAndDirTable, i, &column);
+			// Hide 'Unmangle C++ names' checkbox
+			ShowWindow(m_hCheckBoxCPPNameUnmangle, SW_HIDE);
+
+			// Insert ListView columns
+			LV_COLUMN column;
+			ZeroMemory(&column, sizeof(column));
+
+			for (size_t i = 0; i < ARRAYSIZE(szGenericColumnText); ++i)
+			{
+				column.mask = LVCF_TEXT;
+				column.pszText = szGenericColumnText[i];
+				ListView_InsertColumn(m_hListViewImportsAndDirTable, int(i), &column);
+			}
+
+			// Fill with data
+			ImportTypeAndDesc SelectedImportTypeAndDesc = m_listImportTypeAndDesc[ImportTypeAndDescIndex];
+
+			switch (SelectedImportTypeAndDesc.ImportType)
+			{
+				case PEReadWrite::ImportType::Static:
+				{
+					PIMAGE_IMPORT_DESCRIPTOR pImportDesc = PIMAGE_IMPORT_DESCRIPTOR(SelectedImportTypeAndDesc.pImportDesc);
+
+					m_ImportsDirInfo =
+					{
+						{ L"Import Lookup Table RVA", DWORD_toString(pImportDesc->OriginalFirstThunk, Hexadecimal),
+						  pImportDesc->OriginalFirstThunk == 0 ? L"Shouldn't be zero, probably faulty Borland linker" : L"" },
+						{ L"Time/Date Stamp", DWORD_toString(pImportDesc->TimeDateStamp), m_PEReaderWriter.isImportsAlreadyBound() ?
+						  L"Already bound, invalid stamp" : L"Meaningless until bound" },
+						{ L"Forwarder Chain", Integer_toString(pImportDesc->ForwarderChain) },
+						{ L"Name RVA", DWORD_toString(pImportDesc->Name, Hexadecimal),
+						  L'\"' + m_PEReaderWriter.getStaticModuleName(std::cref(pImportDesc)) + L'\"' },
+						{ L"Import Address Table RVA", DWORD_toString(pImportDesc->FirstThunk, Hexadecimal) }
+					};
+				}
+				break;
+
+				case PEReadWrite::ImportType::Delayed:
+				{
+					PImgDelayDescr pImportDesc = PImgDelayDescr(SelectedImportTypeAndDesc.pImportDesc);
+
+					m_ImportsDirInfo =
+					{
+						{ L"Attributes", DWORD_toString(pImportDesc->grAttrs), L"Reserved, must be zero" },
+						{ L"Name RVA", DWORD_toString(pImportDesc->rvaDLLName, Hexadecimal),
+						  L'\"' + m_PEReaderWriter.getDelayedModuleName(std::cref(pImportDesc)) + L'\"' },
+						{ L"Module Handle",
+						  DWORD_toString(pImportDesc->rvaHmod, Hexadecimal), L"Meaningless until bound" },
+						{ L"Delay Address Table RVA",
+						  DWORD_toString(pImportDesc->rvaIAT, Hexadecimal), L"Meaningless until bound" },
+						{ L"Name Table RVA", DWORD_toString(pImportDesc->rvaINT, Hexadecimal) },
+						{ L"Bound Table RVA",
+						  DWORD_toString(pImportDesc->rvaBoundIAT, Hexadecimal), L"Meaningless until bound" },
+						{ L"Unload Table RVA", DWORD_toString(pImportDesc->rvaUnloadIAT, Hexadecimal) },
+						{ L"Time Stamp", DWORD_toString(pImportDesc->dwTimeStamp), L"Meaningless until bound" }
+					};
+				}
+				break;
+			}
+
+			// Add items to Import Descriptor Table listview
+			for (size_t i = 0; i < m_ImportsDirInfo.size(); ++i)
+			{
+				LV_ITEM item;
+				ZeroMemory(&item, sizeof(LV_ITEM));
+
+				item.iItem = int(i);
+				item.mask = LVIF_TEXT;
+				item.pszText = LPWSTR(_wcsdup(m_ImportsDirInfo[i].Text.c_str()));
+				ListView_InsertItem(m_hListViewImportsAndDirTable, &item);
+				free(item.pszText);
+
+				item.iSubItem = 1;
+				item.pszText = LPWSTR(_wcsdup(m_ImportsDirInfo[i].Data.c_str()));
+				ListView_SetItem(m_hListViewImportsAndDirTable, &item);
+				free(item.pszText);
+
+				item.iSubItem = 2;
+				item.pszText = LPWSTR(_wcsdup(m_ImportsDirInfo[i].Comments.c_str()));
+				ListView_SetItem(m_hListViewImportsAndDirTable, &item);
+				free(item.pszText);
+			}
+
+			// Resize column
+			for (size_t i = 0; i < ARRAYSIZE(szGenericColumnText); ++i)
+				ListView_SetColumnWidth(m_hListViewImportsAndDirTable,
+				                        i,
+										(i == ARRAYSIZE(szGenericColumnText) - 1 ? LVSCW_AUTOSIZE_USEHEADER : LVSCW_AUTOSIZE));
 		}
-
-		// Add items to Import Functions listview
-		LV_ITEM item;
-		ZeroMemory(&item, sizeof(LV_ITEM));
-
-		for (int i = 0; i < m_lstFunctions.size(); i++)
-		{
-			tstring Buffer;
-
-			// Ordinal
-			item.iItem = i;
-			item.iSubItem = 0;
-			item.mask = LVIF_TEXT;
-			Buffer = m_lstFunctions[i].Type == PEReadWrite::ByOrdinal ? DWORD_toString(m_lstFunctions[i].Ordinal) : _T("");
-			item.pszText = (LPTSTR) Buffer.c_str();
-			ListView_InsertItem(m_hListViewImportsAndDirTable, &item);
-
-			// Hint
-			item.iSubItem = 1;
-			Buffer = m_lstFunctions[i].Type == PEReadWrite::ByName ? DWORD_toString(m_lstFunctions[i].Hint) : _T("");
-			item.pszText = (LPTSTR) Buffer.c_str();
-			ListView_SetItem(m_hListViewImportsAndDirTable, &item);
-
-			// Name
-			item.iSubItem = 2;
-			Buffer = MultiByte_toString(m_lstFunctions[i].Type == PEReadWrite::ByName ? (ChkBoxUnmangle_Checked ?
-											PEReadWrite::UnmangleCPPNames(m_lstFunctions[i].Name, PEReadWrite::Full).c_str() :
-											m_lstFunctions[i].Name.c_str()) : "n/a");
-
-			item.pszText = (LPTSTR) Buffer.c_str();
-			ListView_SetItem(m_hListViewImportsAndDirTable, &item);
-		}
-
-		// Resize column
-		for (int i = 0; i < GetArraySize(szImportsColumnText); i++)
-			ListView_SetColumnWidth(m_hListViewImportsAndDirTable, i, LVSCW_AUTOSIZE_USEHEADER);
+		break;
 	}
 }
